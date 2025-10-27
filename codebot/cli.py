@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import click
+from dotenv import load_dotenv
 
 from codebot.orchestrator import Orchestrator
 from codebot.parser import parse_task_prompt, parse_task_prompt_file
@@ -31,7 +32,7 @@ from codebot.parser import parse_task_prompt, parse_task_prompt_file
     "--github-token",
     type=str,
     default=None,
-    help="GitHub token (defaults to GITHUB_TOKEN env var)",
+    help="GitHub token (defaults to GITHUB_TOKEN env var or .env file)",
 )
 @click.option(
     "--verbose",
@@ -62,6 +63,11 @@ def main(
           Fix the login authentication bug.
           Ensure all tests pass.
     """
+    # Load environment variables from .env file
+    load_dotenv()
+
+    import pdb; pdb.set_trace()
+    
     # Parse task prompt
     try:
         if task_prompt:

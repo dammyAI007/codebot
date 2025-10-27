@@ -147,12 +147,13 @@ Codebot is a CLI tool that automates AI-assisted development tasks by:
 - `click`: CLI framework
 - `pyyaml`: YAML parsing
 - `requests`: GitHub API calls
+- `python-dotenv`: Environment variable loading from .env files
 - Standard library: `subprocess`, `pathlib`, `json`, `hashlib`, `uuid`, `dataclasses`
 
 ## Configuration
 
 ### Environment Variables
-- `GITHUB_TOKEN`: GitHub personal access token
+- `GITHUB_TOKEN`: GitHub personal access token (can be set via environment variable or .env file)
 
 ### Command-Line Options
 - `--task-prompt`: Inline task prompt (JSON/YAML)

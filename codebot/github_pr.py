@@ -16,13 +16,13 @@ class GitHubPR:
         Initialize GitHub PR creator.
         
         Args:
-            github_token: GitHub personal access token (defaults to GITHUB_TOKEN env var)
+            github_token: GitHub personal access token (defaults to GITHUB_TOKEN env var or .env file)
         """
         self.token = github_token or os.getenv("GITHUB_TOKEN")
         
         if not self.token:
             raise RuntimeError(
-                "GitHub token not found. Please set GITHUB_TOKEN environment variable."
+                "GitHub token not found. Please set GITHUB_TOKEN environment variable or add it to a .env file."
             )
         
         self.headers = {

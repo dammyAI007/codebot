@@ -11,3 +11,6 @@ wheels/
 
 # Codebot work directories
 codebot_workspace/
+
+.env
+codebot_workspace

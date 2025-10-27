@@ -93,7 +93,7 @@ class Orchestrator:
     
     def _setup_environment(self) -> None:
         """Setup the isolated environment."""
-        self.env_manager = EnvironmentManager(self.work_base_dir, self.task)
+        self.env_manager = EnvironmentManager(self.work_base_dir, self.task, self.github_token)
         self.work_dir = self.env_manager.setup_environment()
         print(f"Environment setup complete: {self.work_dir}")
     

@@ -11,16 +11,18 @@ from codebot.utils import generate_branch_name, generate_directory_name
 class EnvironmentManager:
     """Manages isolated development environments for codebot tasks."""
     
-    def __init__(self, base_dir: Path, task: TaskPrompt):
+    def __init__(self, base_dir: Path, task: TaskPrompt, github_token: Optional[str] = None):
         """
         Initialize the environment manager.
         
         Args:
             base_dir: Base directory for creating temporary workspaces
             task: Task prompt containing repository and task details
+            github_token: GitHub token for authentication (optional)
         """
         self.base_dir = base_dir
         self.task = task
+        self.github_token = github_token
         self.work_dir: Optional[Path] = None
         self.branch_name: Optional[str] = None
         self.default_branch: Optional[str] = None
@@ -62,10 +64,24 @@ class EnvironmentManager:
     
     def _clone_repository(self) -> None:
         """Clone the repository into the work directory."""
-        print(f"Cloning repository: {self.task.repository_url}")
+        # Prepare repository URL with authentication if token is available
+        repo_url = self.task.repository_url
+        
+        if self.github_token and repo_url.startswith("https://github.com/"):
+            # Extract the repository path from the URL
+            if repo_url.endswith(".git"):
+                repo_path = repo_url[19:-4]  # Remove "https://github.com/" and ".git"
+            else:
+                repo_path = repo_url[19:]  # Remove "https://github.com/"
+            
+            # Create authenticated URL
+            repo_url = f"https://{self.github_token}@github.com/{repo_path}.git"
+            print(f"Cloning repository with authentication: https://github.com/{repo_path}")
+        else:
+            print(f"Cloning repository: {repo_url}")
         
         result = subprocess.run(
-            ["git", "clone", self.task.repository_url, str(self.work_dir)],
+            ["git", "clone", repo_url, str(self.work_dir)],
             capture_output=True,
             text=True,
         )

@@ -88,7 +88,7 @@ Options:
   --task-prompt TEXT       Task prompt as JSON or YAML string
   --task-prompt-file PATH  Path to task prompt file (JSON or YAML)
   --work-dir PATH          Base directory for work spaces (defaults to ./codebot_workspace)
-  --github-token TEXT      GitHub token (defaults to GITHUB_TOKEN env var)
+  --github-token TEXT      GitHub token (defaults to GITHUB_TOKEN env var or .env file)
   --verbose                Enable verbose output
   --help                   Show this message and exit
 ```
@@ -96,6 +96,11 @@ Options:
 ### Environment Variables
 
 - `GITHUB_TOKEN`: GitHub personal access token for creating pull requests
+
+You can also create a `.env` file in your project directory with:
+```
+GITHUB_TOKEN=your_github_token_here
+```
 
 ## How It Works
 
