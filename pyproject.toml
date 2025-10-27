@@ -1,0 +1,17 @@
+[project]
+name = "codebot"
+version = "0.1.0"
+description = "CLI tool to work on tasks using AI agents like Claude Code CLI"
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0",
+    "requests>=2.31.0",
+    "click>=8.1.7",
+]
+
+[project.scripts]
+codebot = "codebot.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

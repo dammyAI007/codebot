@@ -1,0 +1,15 @@
+# Example task prompt for codebot
+# This demonstrates how to structure a task for automated AI-assisted development
+
+repository_url: https://github.com/user/example-repo.git
+ticket_id: TASK-001
+ticket_summary: example-task
+description: |
+  This is an example task to demonstrate codebot functionality.
+  
+  Please:
+  - Add a README file with project description
+  - Write a simple Python script that prints "Hello, World!"
+  - Ensure the code follows Python best practices
+  
+  This is just an example and should not be executed against real repositories.
