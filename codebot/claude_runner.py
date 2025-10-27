@@ -95,6 +95,7 @@ class ClaudeRunner:
             "-p", full_prompt,
             "--append-system-prompt", system_prompt,
             "--output-format", "stream-json",
+            "--verbose",
         ]
         
         print(f"Running Claude Code CLI in headless mode...")
