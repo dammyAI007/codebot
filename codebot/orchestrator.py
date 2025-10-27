@@ -1,6 +1,7 @@
 """Main orchestrator for codebot tasks."""
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
@@ -115,6 +116,11 @@ class Orchestrator:
             return
         
         self.claude_runner = ClaudeRunner(self.work_dir)
+        self.git_ops = GitOps(self.work_dir)
+        
+        # Capture git state before Claude runs
+        before_commit = self.git_ops.get_latest_commit_hash()
+        print(f"Repository state before Claude: {before_commit or 'No commits yet'}")
         
         # Add any additional instructions if needed
         append_system_prompt = None
@@ -127,12 +133,83 @@ class Orchestrator:
         )
         
         if result.returncode != 0:
-            print("Claude Code CLI output:", file=sys.stderr)
-            print(result.stdout, file=sys.stderr)
-            print(result.stderr, file=sys.stderr)
             raise RuntimeError(f"Claude Code CLI failed with exit code {result.returncode}")
         
+        # Capture git state after Claude runs
+        after_commit = self.git_ops.get_latest_commit_hash()
+        
+        if before_commit != after_commit:
+            print(f"\n✅ Claude made changes!")
+            print(f"Before: {before_commit or 'No commits'}")
+            print(f"After:  {after_commit}")
+            
+            # Show what changed
+            self._show_git_changes(before_commit, after_commit)
+        else:
+            print(f"\n⚠️  Warning: No new commits detected. Claude may not have made changes.")
+        
         print("Claude Code CLI completed successfully")
+    
+    def _show_git_changes(self, before_commit: Optional[str], after_commit: Optional[str]) -> None:
+        """Show what changed between two commits."""
+        if not self.work_dir:
+            return
+        
+        print("\n" + "=" * 80)
+        print("CHANGES MADE BY CLAUDE:")
+        print("=" * 80)
+        
+        # Show commit message
+        if after_commit:
+            result = subprocess.run(
+                ["git", "log", "-1", "--pretty=format:%B", after_commit],
+                cwd=self.work_dir,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                print(f"\nCommit message:\n{result.stdout}\n")
+        
+        # Show files changed
+        if before_commit:
+            result = subprocess.run(
+                ["git", "diff", "--name-status", before_commit, after_commit or "HEAD"],
+                cwd=self.work_dir,
+                capture_output=True,
+                text=True,
+            )
+        else:
+            result = subprocess.run(
+                ["git", "show", "--name-status", "--pretty=format:", after_commit or "HEAD"],
+                cwd=self.work_dir,
+                capture_output=True,
+                text=True,
+            )
+        
+        if result.returncode == 0 and result.stdout.strip():
+            print("Files changed:")
+            print(result.stdout)
+        
+        # Show diff stats
+        if before_commit:
+            result = subprocess.run(
+                ["git", "diff", "--stat", before_commit, after_commit or "HEAD"],
+                cwd=self.work_dir,
+                capture_output=True,
+                text=True,
+            )
+        else:
+            result = subprocess.run(
+                ["git", "show", "--stat", after_commit or "HEAD"],
+                cwd=self.work_dir,
+                capture_output=True,
+                text=True,
+            )
+        
+        if result.returncode == 0 and result.stdout.strip():
+            print(f"\n{result.stdout}")
+        
+        print("=" * 80 + "\n")
     
     def _verify_changes_committed(self) -> None:
         """Verify that changes were committed."""

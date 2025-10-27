@@ -96,19 +96,22 @@ class ClaudeRunner:
             "--append-system-prompt", system_prompt,
             "--output-format", "stream-json",
             "--verbose",
+            "--dangerously-skip-permissions",  # Skip permission prompts for non-interactive mode
         ]
         
         print(f"Running Claude Code CLI in headless mode...")
         print(f"Task: {description}")
+        print("=" * 80)
         
-        # Run Claude Code CLI
+        # Run Claude Code CLI with output streaming to terminal
+        # Don't capture output so user can see what Claude is doing in real-time
         result = subprocess.run(
             cmd,
             cwd=self.work_dir,
-            capture_output=True,
             text=True,
         )
         
+        print("=" * 80)
         return result
     
     def verify_changes_committed(self) -> bool:

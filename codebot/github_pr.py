@@ -98,16 +98,35 @@ class GitHubPR:
         }
         
         print(f"Creating pull request: {title}")
+        print(f"  From branch: {branch_name}")
+        print(f"  To branch: {base_branch}")
+        print(f"  Repository: {owner}/{repo}")
         
         response = requests.post(url, headers=self.headers, json=data)
         
         if response.status_code != 201:
-            error_msg = response.json().get("message", "Unknown error")
-            raise RuntimeError(f"Failed to create pull request: {error_msg}")
+            error_data = response.json()
+            error_msg = error_data.get("message", "Unknown error")
+            
+            # Show detailed validation errors if available
+            if "errors" in error_data:
+                error_details = "\n".join([f"  - {err.get('message', err)}" for err in error_data["errors"]])
+                raise RuntimeError(
+                    f"Failed to create pull request: {error_msg}\n"
+                    f"Validation errors:\n{error_details}\n"
+                    f"Request data: {data}"
+                )
+            else:
+                raise RuntimeError(
+                    f"Failed to create pull request: {error_msg}\n"
+                    f"Status code: {response.status_code}\n"
+                    f"Response: {error_data}\n"
+                    f"Request data: {data}"
+                )
         
         pr_data = response.json()
         pr_url = pr_data["html_url"]
-        print(f"Created pull request: {pr_url}")
+        print(f"✅ Created pull request: {pr_url}")
         
         return pr_data
     
