@@ -6,6 +6,30 @@ import uuid
 from typing import Dict, Optional
 
 
+def validate_github_token(token: str) -> bool:
+    """
+    Validate a GitHub token by making a simple API call.
+    
+    Args:
+        token: GitHub personal access token
+        
+    Returns:
+        True if token is valid, False otherwise
+    """
+    import requests
+    
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+    
+    try:
+        response = requests.get("https://api.github.com/user", headers=headers, timeout=10)
+        return response.status_code == 200
+    except requests.RequestException:
+        return False
+
+
 def get_git_env() -> Dict[str, str]:
     """
     Get git environment variables for non-interactive operation.

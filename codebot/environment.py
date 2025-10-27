@@ -75,8 +75,8 @@ class EnvironmentManager:
             else:
                 repo_path = repo_url[19:]  # Remove "https://github.com/"
             
-            # Create authenticated URL
-            repo_url = f"https://{self.github_token}@github.com/{repo_path}.git"
+            # Create authenticated URL using oauth2 format (more secure than username:token)
+            repo_url = f"https://oauth2:{self.github_token}@github.com/{repo_path}.git"
             print(f"Cloning repository with authentication: https://github.com/{repo_path}")
         else:
             print(f"Cloning repository: {repo_url}")
@@ -92,9 +92,50 @@ class EnvironmentManager:
         )
         
         if result.returncode != 0:
-            raise RuntimeError(
-                f"Failed to clone repository: {result.stderr}"
-            )
+            # Provide more helpful error messages for common authentication issues
+            error_msg = result.stderr.lower()
+            if "authentication failed" in error_msg or "401" in error_msg:
+                raise RuntimeError(
+                    f"Authentication failed. Please check your GitHub token permissions and validity.\n"
+                    f"Error: {result.stderr}"
+                )
+            elif "not found" in error_msg or "404" in error_msg:
+                raise RuntimeError(
+                    f"Repository not found or access denied. Please check the repository URL and token permissions.\n"
+                    f"Error: {result.stderr}"
+                )
+            else:
+                raise RuntimeError(f"Failed to clone repository: {result.stderr}")
+        
+        # After successful clone, reset remote URL to remove embedded credentials for security
+        if self.github_token and repo_url.startswith("https://oauth2:"):
+            self._reset_remote_url()
+    
+    def _reset_remote_url(self) -> None:
+        """Reset remote URL to remove embedded credentials for security."""
+        # Extract the clean repository path
+        repo_path = self.task.repository_url
+        if repo_path.endswith(".git"):
+            repo_path = repo_path[19:-4]  # Remove "https://github.com/" and ".git"
+        else:
+            repo_path = repo_path[19:]  # Remove "https://github.com/"
+        
+        # Set clean remote URL without credentials
+        clean_url = f"https://github.com/{repo_path}.git"
+        
+        env = get_git_env()
+        result = subprocess.run(
+            ["git", "remote", "set-url", "origin", clean_url],
+            cwd=self.work_dir,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        
+        if result.returncode != 0:
+            print(f"Warning: Failed to reset remote URL: {result.stderr}")
+        else:
+            print(f"Reset remote URL to clean format: {clean_url}")
     
     def _detect_default_branch(self) -> str:
         """

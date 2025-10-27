@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from codebot.orchestrator import Orchestrator
 from codebot.parser import parse_task_prompt, parse_task_prompt_file
+from codebot.utils import validate_github_token
 
 
 @click.command()
@@ -65,8 +66,6 @@ def main(
     """
     # Load environment variables from .env file
     load_dotenv()
-
-    import pdb; pdb.set_trace()
     
     # Parse task prompt
     try:
@@ -88,6 +87,15 @@ def main(
         work_base_dir = Path.cwd() / "codebot_workspace"
     
     work_base_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Validate GitHub token if provided
+    if github_token:
+        print("Validating GitHub token...")
+        if not validate_github_token(github_token):
+            click.echo("Error: Invalid GitHub token. Please check your token and try again.", err=True)
+            click.echo("Make sure your token has the correct permissions (repo access for private repos).", err=True)
+            sys.exit(1)
+        print("GitHub token validated successfully")
     
     # Create and run orchestrator
     try:
