@@ -54,6 +54,7 @@ def generate_short_uuid() -> str:
 def generate_branch_name(
     ticket_id: Optional[str] = None,
     short_name: Optional[str] = None,
+    uuid_part: Optional[str] = None,
 ) -> str:
     """
     Generate a branch name in the format: u/codebot/[TICKET-ID/]<uuid>/<short-name>
@@ -61,11 +62,13 @@ def generate_branch_name(
     Args:
         ticket_id: Optional ticket ID (e.g., "PROJ-123")
         short_name: Short descriptive name for the task
+        uuid_part: Optional UUID to use (generates new one if not provided)
         
     Returns:
         Branch name string
     """
-    uuid_part = generate_short_uuid()
+    if uuid_part is None:
+        uuid_part = generate_short_uuid()
     
     parts = ["u", "codebot"]
     
@@ -80,17 +83,19 @@ def generate_branch_name(
     return "/".join(parts)
 
 
-def generate_directory_name(ticket_id: Optional[str] = None) -> str:
+def generate_directory_name(ticket_id: Optional[str] = None, uuid_part: Optional[str] = None) -> str:
     """
     Generate a directory name in the format: task_[TICKET-ID_]uuid
     
     Args:
         ticket_id: Optional ticket ID (e.g., "PROJ-123")
+        uuid_part: Optional UUID to use (generates new one if not provided)
         
     Returns:
         Directory name string
     """
-    uuid_part = generate_short_uuid()
+    if uuid_part is None:
+        uuid_part = generate_short_uuid()
     
     if ticket_id:
         return f"task_{ticket_id}_{uuid_part}"

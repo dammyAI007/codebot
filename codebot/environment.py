@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from codebot.models import TaskPrompt
-from codebot.utils import generate_branch_name, generate_directory_name, get_git_env
+from codebot.utils import generate_branch_name, generate_directory_name, generate_short_uuid, get_git_env
 
 
 class EnvironmentManager:
@@ -35,8 +35,11 @@ class EnvironmentManager:
         Returns:
             Path to the working directory
         """
+        # Generate a single UUID for both directory and branch name
+        uuid_part = generate_short_uuid()
+        
         # Create work directory
-        dir_name = generate_directory_name(self.task.ticket_id)
+        dir_name = generate_directory_name(self.task.ticket_id, uuid_part)
         self.work_dir = self.base_dir / dir_name
         self.work_dir.mkdir(parents=True, exist_ok=True)
         
@@ -53,10 +56,11 @@ class EnvironmentManager:
         base_branch = self.task.base_branch or self.default_branch
         self._checkout_branch(base_branch)
         
-        # Generate and checkout new branch
+        # Generate and checkout new branch using the same UUID
         self.branch_name = generate_branch_name(
             ticket_id=self.task.ticket_id,
             short_name=self.task.ticket_summary,
+            uuid_part=uuid_part,
         )
         print(f"Creating branch: {self.branch_name}")
         self._create_branch(self.branch_name)
