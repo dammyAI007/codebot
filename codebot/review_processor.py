@@ -9,7 +9,7 @@ from typing import Optional
 from codebot.environment import EnvironmentManager
 from codebot.git_ops import GitOps
 from codebot.github_pr import GitHubPR
-from codebot.models import Task
+from codebot.models import TaskPrompt
 from codebot.review_runner import ReviewRunner
 from codebot.utils import extract_uuid_from_branch, find_workspace_by_uuid
 
@@ -238,7 +238,7 @@ class ReviewProcessor:
                 print(f"Found existing workspace: {workspace_path}")
                 
                 # Reuse and update workspace
-                task = Task(
+                task = TaskPrompt(
                     description=f"Review comment on PR #{pr_number}",
                     repository_url=repo_url,
                 )
@@ -258,7 +258,7 @@ class ReviewProcessor:
         
         # If no existing workspace, create a new one
         print("Creating new workspace...")
-        task = Task(
+        task = TaskPrompt(
             description=f"Review comment on PR #{pr_number}",
             repository_url=repo_url,
         )
