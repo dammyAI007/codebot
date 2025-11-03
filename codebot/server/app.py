@@ -41,22 +41,36 @@ from codebot.core.utils import validate_github_token
     is_flag=True,
     help="Enable debug mode (auto-reload on code changes, detailed errors)",
 )
+@click.option(
+    "--api-key",
+    type=str,
+    default=None,
+    help="API key for HTTP endpoints (defaults to CODEBOT_API_KEYS env var)",
+)
+@click.option(
+    "--workers",
+    type=int,
+    default=1,
+    help="Number of task processor worker threads (default: 1)",
+)
 def serve(
     port: int,
     work_dir: str,
     github_token: str,
     webhook_secret: str,
     debug: bool,
+    api_key: str,
+    workers: int,
 ) -> None:
     """
-    Start webhook server to handle PR review comments.
+    Start webhook server to handle PR review comments and HTTP task submissions.
     
-    This command starts a Flask server that listens for GitHub webhook events
-    for PR review comments. When a comment is received, it queues it for
-    processing by Claude Code.
+    This command starts a Flask server that:
+    - Listens for GitHub webhook events for PR review comments
+    - Provides HTTP API endpoints for task submission
     
     Example:
-        codebot serve --port 5000
+        codebot serve --port 5000 --workers 2
     
     Before running, configure a GitHub webhook:
     1. Go to repository Settings > Webhooks
@@ -64,6 +78,10 @@ def serve(
     3. Content type: application/json
     4. Secret: Set GITHUB_WEBHOOK_SECRET env var
     5. Events: Select "Issue comments", "Pull request reviews", and "Pull request review comments"
+    
+    For HTTP API:
+    - Set CODEBOT_API_KEYS environment variable with comma-separated API keys
+    - Use --workers to scale task processing
     """
     load_dotenv()
     
@@ -91,6 +109,19 @@ def serve(
     # Set webhook secret in environment for the server
     os.environ["GITHUB_WEBHOOK_SECRET"] = effective_secret
     
+    # Handle API keys
+    if api_key:
+        os.environ["CODEBOT_API_KEYS"] = api_key
+    
+    # Check if API is enabled
+    from codebot.server.config import config
+    api_enabled = config.has_api_keys()
+    
+    if api_enabled:
+        print(f"HTTP API enabled with {len(config.api_keys)} API key(s)")
+    else:
+        print("HTTP API disabled (no API keys configured)")
+    
     # Determine work directory
     if work_dir:
         work_base_dir = Path(work_dir)
@@ -99,31 +130,61 @@ def serve(
     
     work_base_dir.mkdir(parents=True, exist_ok=True)
     
-    print(f"Starting webhook server on port {port}...")
+    print(f"Starting server on port {port}...")
     print(f"Work directory: {work_base_dir}")
     print(f"Health check: http://localhost:{port}/health")
     print(f"Webhook endpoint: http://localhost:{port}/webhook")
+    
+    if api_enabled:
+        print(f"API endpoints: http://localhost:{port}/api/tasks/submit")
+        print(f"               http://localhost:{port}/api/tasks/{{task_id}}/status")
+        print(f"               http://localhost:{port}/api/tasks")
+    
     print("\nPress Ctrl+C to stop the server\n")
     
     # Import here to avoid loading Flask unless needed
-    from codebot.server.webhook_server import app, review_queue, start_server
+    from codebot.server.webhook import review_queue
     from codebot.server.review_processor import ReviewProcessor
+    from codebot.server.task_queue import TaskQueue
+    from codebot.server.task_processor import TaskProcessor
+    from codebot.server.flask_app import create_app, start_server
     
     # Create and start review processor in background thread
-    processor = ReviewProcessor(
+    review_processor = ReviewProcessor(
         review_queue=review_queue,
         workspace_base_dir=work_base_dir,
         github_token=effective_token,
     )
     
-    processor_thread = threading.Thread(target=processor.start, daemon=True)
-    processor_thread.start()
+    review_processor_thread = threading.Thread(target=review_processor.start, daemon=True)
+    review_processor_thread.start()
+    
+    # Create task queue and processor if API is enabled
+    task_processor = None
+    task_queue = None
+    if api_enabled:
+        # Create task queue
+        task_queue = TaskQueue(max_size=config.max_queue_size)
+        
+        # Create and start task processor
+        task_processor = TaskProcessor(
+            task_queue=task_queue,
+            workspace_base_dir=work_base_dir,
+            github_token=effective_token,
+            num_workers=workers,
+        )
+        task_processor.start()
+    
+    # Create Flask app
+    app = create_app(task_queue=task_queue)
     
     # Start Flask server (blocking)
     try:
-        start_server(port=port, debug=debug)
+        start_server(app, port=port, debug=debug)
     except KeyboardInterrupt:
         print("\n\nShutting down...")
-        processor.stop()
+        review_processor.stop()
+        if task_processor:
+            task_processor.stop()
         sys.exit(0)
 

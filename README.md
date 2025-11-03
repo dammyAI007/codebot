@@ -292,6 +292,153 @@ codebot serve --port 5000 --debug
 
 **Note**: Never use `--debug` in production - it's slower and exposes error details.
 
+## HTTP API
+
+Codebot provides HTTP REST API endpoints for programmatic task submission with async execution and status tracking.
+
+### Setup
+
+1. **Set API Keys** (comma-separated for multiple keys):
+```bash
+export CODEBOT_API_KEYS="your-secret-key-1,your-secret-key-2"
+```
+
+2. **Start Server with API Enabled**:
+```bash
+codebot serve --port 5000 --workers 2
+```
+
+The `--workers` flag controls how many tasks can be processed in parallel.
+
+### API Endpoints
+
+#### Submit a Task
+
+**POST** `/api/tasks/submit`
+
+Submit a new task for async execution.
+
+**Authentication**: Required (API key in `Authorization: Bearer <key>` or `X-API-Key: <key>` header)
+
+**Request Body**:
+```json
+{
+  "repository_url": "https://github.com/user/repo.git",
+  "description": "Add dark mode support to the application",
+  "ticket_id": "FEAT-123",
+  "ticket_summary": "add-dark-mode",
+  "test_command": "npm test",
+  "base_branch": "main"
+}
+```
+
+**Required fields**: `repository_url`, `description`
+
+**Response** (202 Accepted):
+```json
+{
+  "task_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "pending",
+  "message": "Task queued successfully"
+}
+```
+
+**Example**:
+```bash
+curl -X POST http://localhost:5000/api/tasks/submit \
+  -H "Authorization: Bearer your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repository_url": "https://github.com/user/repo.git",
+    "description": "Add dark mode support"
+  }'
+```
+
+#### Get Task Status
+
+**GET** `/api/tasks/{task_id}/status`
+
+Check the status and results of a task.
+
+**Authentication**: Required
+
+**Response** (200 OK):
+```json
+{
+  "task_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "submitted_at": "2025-11-03T12:00:00Z",
+  "started_at": "2025-11-03T12:00:05Z",
+  "completed_at": "2025-11-03T12:05:30Z",
+  "result": {
+    "pr_url": "https://github.com/user/repo/pull/123",
+    "branch_name": "u/codebot/abc1234/add-dark-mode",
+    "work_dir": "/path/to/workspace"
+  }
+}
+```
+
+**Status values**: `pending`, `running`, `completed`, `failed`
+
+**Example**:
+```bash
+curl http://localhost:5000/api/tasks/550e8400-e29b-41d4-a716-446655440000/status \
+  -H "Authorization: Bearer your-api-key"
+```
+
+#### List Tasks
+
+**GET** `/api/tasks?status=completed&limit=50`
+
+List recent tasks with optional filtering.
+
+**Authentication**: Required
+
+**Query Parameters**:
+- `status` (optional): Filter by status (`pending`, `running`, `completed`, `failed`)
+- `limit` (optional): Max results (1-1000, default: 100)
+
+**Response** (200 OK):
+```json
+{
+  "tasks": [
+    {
+      "task_id": "550e8400-e29b-41d4-a716-446655440000",
+      "status": "completed",
+      "submitted_at": "2025-11-03T12:00:00Z",
+      "started_at": "2025-11-03T12:00:05Z",
+      "completed_at": "2025-11-03T12:05:30Z",
+      "repository_url": "https://github.com/user/repo.git",
+      "description": "Add dark mode support to the application"
+    }
+  ],
+  "count": 1
+}
+```
+
+**Example**:
+```bash
+curl "http://localhost:5000/api/tasks?status=completed&limit=10" \
+  -H "Authorization: Bearer your-api-key"
+```
+
+### API Features
+
+- **Async Execution**: Tasks are queued and processed in the background
+- **Status Tracking**: Monitor task progress via status endpoint
+- **Scalable Workers**: Configure multiple worker threads with `--workers`
+- **Separate Queues**: API tasks and webhook review comments use independent queues
+- **Secure**: API key authentication required
+- **FIFO Processing**: Tasks are processed in order of submission
+
+### Configuration
+
+Environment variables for API:
+- `CODEBOT_API_KEYS`: Comma-separated list of valid API keys
+- `CODEBOT_MAX_WORKERS`: Maximum worker threads (default: 1)
+- `CODEBOT_MAX_QUEUE_SIZE`: Maximum tasks in queue (default: 100)
+- `CODEBOT_TASK_RETENTION`: Task data retention in seconds (default: 86400)
+
 ## Examples
 
 ### Simple Bug Fix

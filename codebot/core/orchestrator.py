@@ -40,6 +40,8 @@ class Orchestrator:
         self.git_ops: Optional[GitOps] = None
         self.github_pr: Optional[GitHubPR] = None
         self.work_dir: Optional[Path] = None
+        self.branch_name: Optional[str] = None
+        self.pr_url: Optional[str] = None
     
     def run(self) -> None:
         """Run the complete codebot workflow."""
@@ -73,7 +75,11 @@ class Orchestrator:
             
             # Step 7: Create GitHub PR
             print("\n[7/9] Creating GitHub pull request...")
-            pr_url = self._create_pr()
+            self.pr_url = self._create_pr()
+            
+            # Store branch name for API access
+            if self.env_manager:
+                self.branch_name = self.env_manager.branch_name
             
             # Steps 8-9: Summary and cleanup
             print("\n[8-9/9] Task completed successfully!")
@@ -81,10 +87,10 @@ class Orchestrator:
             print("SUMMARY")
             print("=" * 60)
             print(f"Work directory: {self.work_dir}")
-            if self.env_manager:
-                print(f"Branch: {self.env_manager.branch_name}")
-            if pr_url:
-                print(f"Pull request: {pr_url}")
+            if self.branch_name:
+                print(f"Branch: {self.branch_name}")
+            if self.pr_url:
+                print(f"Pull request: {self.pr_url}")
             print("=" * 60)
             
         except Exception as e:

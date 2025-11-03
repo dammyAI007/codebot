@@ -1,20 +1,15 @@
-"""GitHub webhook server for handling PR review comments."""
+"""GitHub webhook handlers for PR review comments."""
 
 import hashlib
 import hmac
 import os
-import threading
 from queue import Queue
-from typing import Optional
 
-from flask import Flask, request, jsonify
+from flask import request, jsonify
 
 
 # Global FIFO queue for review comments
 review_queue: Queue = Queue()
-
-# Flask app
-app = Flask(__name__)
 
 
 def verify_signature(payload: bytes, signature: str, secret: str) -> bool:
@@ -46,7 +41,6 @@ def verify_signature(payload: bytes, signature: str, secret: str) -> bool:
     return hmac.compare_digest(computed_signature, expected_signature)
 
 
-@app.route("/webhook", methods=["POST"])
 def handle_webhook():
     """Handle incoming GitHub webhook events."""
     # Get webhook secret from environment
@@ -243,28 +237,4 @@ def handle_issue_comment(payload: dict) -> tuple:
     return jsonify({"message": "Comment queued for processing"}), 200
 
 
-@app.route("/health", methods=["GET"])
-def health_check():
-    """Health check endpoint."""
-    return jsonify({
-        "status": "healthy",
-        "queue_size": review_queue.qsize()
-    }), 200
-
-
-def start_server(port: int = 5000, debug: bool = False):
-    """
-    Start the webhook server.
-    
-    Args:
-        port: Port to listen on
-        debug: Enable debug mode (enables auto-reload and detailed error pages)
-    """
-    app.run(
-        host="0.0.0.0",
-        port=port,
-        debug=debug,
-        use_reloader=debug,
-        reloader_type='stat' if debug else None
-    )
 
