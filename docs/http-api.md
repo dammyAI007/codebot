@@ -53,16 +53,10 @@ API endpoints: http://localhost:5000/api/tasks/submit
 
 All API endpoints require authentication using an API key.
 
-### Authorization Header (Recommended)
+### Authorization Header
 
 ```bash
 curl -H "Authorization: Bearer your-api-key" ...
-```
-
-### X-API-Key Header
-
-```bash
-curl -H "X-API-Key: your-api-key" ...
 ```
 
 ## Endpoints
@@ -282,95 +276,6 @@ Response:
   "task_queue_size": 2
 }
 ```
-
-## Integration Examples
-
-### Python
-
-```python
-import requests
-import time
-
-API_URL = "http://localhost:5000/api"
-API_KEY = "your-api-key"
-HEADERS = {"Authorization": f"Bearer {API_KEY}"}
-
-# Submit task
-response = requests.post(
-    f"{API_URL}/tasks/submit",
-    headers=HEADERS,
-    json={
-        "repository_url": "https://github.com/user/repo.git",
-        "description": "Add feature X"
-    }
-)
-task_id = response.json()["task_id"]
-
-# Poll for completion
-while True:
-    response = requests.get(
-        f"{API_URL}/tasks/{task_id}/status",
-        headers=HEADERS
-    )
-    data = response.json()
-    
-    if data["status"] in ["completed", "failed"]:
-        break
-    
-    time.sleep(5)
-
-print(f"PR URL: {data['result']['pr_url']}")
-```
-
-### JavaScript/Node.js
-
-```javascript
-const axios = require('axios');
-
-const API_URL = 'http://localhost:5000/api';
-const API_KEY = 'your-api-key';
-const headers = { 'Authorization': `Bearer ${API_KEY}` };
-
-async function submitTask() {
-  // Submit task
-  const { data } = await axios.post(
-    `${API_URL}/tasks/submit`,
-    {
-      repository_url: 'https://github.com/user/repo.git',
-      description: 'Add feature X'
-    },
-    { headers }
-  );
-  
-  const taskId = data.task_id;
-  
-  // Poll for completion
-  while (true) {
-    const { data: status } = await axios.get(
-      `${API_URL}/tasks/${taskId}/status`,
-      { headers }
-    );
-    
-    if (['completed', 'failed'].includes(status.status)) {
-      console.log('PR URL:', status.result.pr_url);
-      break;
-    }
-    
-    await new Promise(resolve => setTimeout(resolve, 5000));
-  }
-}
-
-submitTask();
-```
-
-## Best Practices
-
-1. **Use HTTPS in production** - Never send API keys over unencrypted connections
-2. **Rotate API keys regularly** - Generate new keys periodically
-3. **Use separate keys per client** - Makes it easier to revoke access
-4. **Set reasonable limits** - Configure `MAX_QUEUE_SIZE` to prevent overload
-5. **Monitor queue size** - Use `/health` endpoint to track system load
-6. **Handle rate limits** - Implement exponential backoff for polling
 
 ## Troubleshooting
 

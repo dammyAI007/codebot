@@ -234,19 +234,12 @@ Codebot uses **two independent queues**:
    - Single-threaded (sequential processing)
    - Prevents conflicts in PR updates
 
-**Why Separate?**
-- Different priorities and SLAs
-- Independent scaling needs
-- Isolation prevents interference
-- Clear separation of concerns
-
 ### FIFO Processing
 
 Both queues use First-In-First-Out ordering:
 - Predictable processing order
 - No race conditions
 - Stable workspace state
-- Fair resource allocation
 
 ## Data Flow
 
@@ -288,13 +281,6 @@ GitHub → Webhook → ReviewQueue → ReviewProcessor → Claude → Git → Gi
 
 ## Scalability
 
-### Horizontal Scaling
-
-- Run multiple server instances
-- Use load balancer
-- Share queue via Redis (future)
-- Share storage for workspaces
-
 ### Vertical Scaling
 
 - Increase `--workers` for more parallel tasks
@@ -304,16 +290,11 @@ GitHub → Webhook → ReviewQueue → ReviewProcessor → Claude → Git → Gi
 ### Current Limitations
 
 - In-memory queues (not persistent)
-- Single server instance
-- No distributed locking
 
 ### Future Enhancements
 
-- Redis/PostgreSQL for queue persistence
-- Distributed task processing
-- WebSocket for real-time updates
-- Task cancellation
-- Priority queues
+- Redis/PostgreSQL/SQLite for queue persistence
+- Task management via web interface 
 
 ## Next Steps
 

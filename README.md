@@ -190,6 +190,11 @@ See [Configuration Guide](docs/configuration.md) for all options.
 
 See [Architecture](docs/architecture.md) for technical details.
 
+## Known Limitations
+
+- **Repository Cloning**: Each task clones the repository into a fresh workspace, which may be slow for large repositories with extensive history
+- **GitHub Identity**: Comments and PRs are created using your Personal Access Token, so they appear under your GitHub account rather than as a bot user. For production use, we should consider creating a GitHub App for proper bot identity 
+
 ## Contributing
 
 Contributions are welcome! Here's how to get started:
@@ -222,4 +227,4 @@ MIT License - see LICENSE file for details.
 
 ---
 
-Made with ❤️ using [Claude Code CLI](https://www.anthropic.com/claude/docs/claude-code)
+Made with ❤️ by [ajibigad](https://github.com/ajibigad) using [Cursor](https://cursor.com/home)
