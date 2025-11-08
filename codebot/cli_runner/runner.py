@@ -12,8 +12,8 @@ from dotenv import load_dotenv
 from codebot.core.models import Task
 from codebot.core.orchestrator import Orchestrator
 from codebot.core.parser import parse_task_prompt, parse_task_prompt_file
+from codebot.core.task_store import global_task_store
 from codebot.core.utils import validate_github_token
-from codebot.server.task_store import global_task_store
 
 
 @click.command(name="run")

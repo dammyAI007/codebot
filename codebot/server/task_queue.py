@@ -5,7 +5,7 @@ from queue import Empty, Queue
 from typing import List, Optional
 
 from codebot.core.models import Task
-from codebot.server.task_store import global_task_store
+from codebot.core.task_store import global_task_store
 
 
 class TaskQueue:

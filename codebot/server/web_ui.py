@@ -6,8 +6,8 @@ from datetime import datetime
 from flask import Blueprint, render_template, jsonify, request, current_app
 
 from codebot.core.models import Task
+from codebot.core.task_store import global_task_store
 from codebot.server.auth import require_basic_auth
-from codebot.server.task_store import global_task_store
 
 
 def create_web_ui_blueprint() -> Blueprint:
