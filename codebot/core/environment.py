@@ -1,10 +1,10 @@
 """Environment manager for isolated development environments."""
 
-import os
 import subprocess
 from pathlib import Path
 from typing import Optional, Tuple
 
+from codebot.core.github_app import GitHubAppAuth
 from codebot.core.models import TaskPrompt
 from codebot.core.utils import (
     generate_branch_name, 
@@ -18,18 +18,18 @@ from codebot.core.utils import (
 class EnvironmentManager:
     """Manages isolated development environments for codebot tasks."""
     
-    def __init__(self, base_dir: Path, task: TaskPrompt, github_token: Optional[str] = None):
+    def __init__(self, base_dir: Path, task: TaskPrompt, github_app_auth: Optional[GitHubAppAuth] = None):
         """
         Initialize the environment manager.
         
         Args:
             base_dir: Base directory for creating temporary workspaces
             task: Task prompt containing repository and task details
-            github_token: GitHub token for authentication (optional)
+            github_app_auth: GitHub App authentication instance (optional)
         """
         self.base_dir = base_dir
         self.task = task
-        self.github_token = github_token
+        self.github_app_auth = github_app_auth
         self.work_dir: Optional[Path] = None
         self.branch_name: Optional[str] = None
         self.default_branch: Optional[str] = None
@@ -157,6 +157,9 @@ class EnvironmentManager:
         """
         from urllib.parse import urlparse
         
+        if not self.github_app_auth:
+            return repo_url
+        
         parsed = urlparse(repo_url)
         if not parsed.netloc:
             return repo_url
@@ -168,16 +171,19 @@ class EnvironmentManager:
         if not path.endswith(".git"):
             path += ".git"
         
-        # Build authenticated URL using oauth2 format (more secure than username:token)
-        auth_url = f"https://oauth2:{self.github_token}@{parsed.netloc}{path}"
+        # Get installation token from GitHub App auth
+        token = self.github_app_auth.get_installation_token()
+        
+        # Build authenticated URL using oauth2 format
+        auth_url = f"https://oauth2:{token}@{parsed.netloc}{path}"
         return auth_url
     
     def _clone_repository(self) -> None:
         """Clone the repository into the work directory."""
-        # Prepare repository URL with authentication if token is available
+        # Prepare repository URL with authentication if GitHub App auth is available
         repo_url = self.task.repository_url
         
-        if self.github_token and is_github_url(repo_url):
+        if self.github_app_auth and is_github_url(repo_url):
             repo_url = self._create_authenticated_url(repo_url)
             print(f"Cloning repository with authentication")
         else:
@@ -198,19 +204,19 @@ class EnvironmentManager:
             error_msg = result.stderr.lower()
             if "authentication failed" in error_msg or "401" in error_msg:
                 raise RuntimeError(
-                    f"Authentication failed. Please check your GitHub token permissions and validity.\n"
+                    f"Authentication failed. Please check your GitHub App configuration and permissions.\n"
                     f"Error: {result.stderr}"
                 )
             elif "not found" in error_msg or "404" in error_msg:
                 raise RuntimeError(
-                    f"Repository not found or access denied. Please check the repository URL and token permissions.\n"
+                    f"Repository not found or access denied. Please check the repository URL and GitHub App permissions.\n"
                     f"Error: {result.stderr}"
                 )
             else:
                 raise RuntimeError(f"Failed to clone repository: {result.stderr}")
         
         # After successful clone, reset remote URL to remove embedded credentials for security
-        if self.github_token and is_github_url(repo_url):
+        if self.github_app_auth and is_github_url(repo_url):
             self._reset_remote_url()
     
     def _reset_remote_url(self) -> None:

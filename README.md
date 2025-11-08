@@ -22,8 +22,10 @@ cd codebot && uv sync
 # Activate virtual environment
 source .venv/bin/activate
 
-# Set GitHub token
-export GITHUB_TOKEN="your_github_token"
+# Set GitHub App configuration
+export GITHUB_APP_ID="123456"
+export GITHUB_APP_PRIVATE_KEY_PATH="./codebot-private-key.pem"
+export GITHUB_APP_INSTALLATION_ID="789012"
 
 # Run a task
 codebot run --task-prompt '{
@@ -54,7 +56,7 @@ That's it! Codebot will clone the repo, make changes with Claude Code CLI, and c
 - [uv](https://github.com/astral-sh/uv) package manager
 - [Claude Code CLI](https://www.anthropic.com/claude/docs/claude-code)
 - Git with authentication
-- GitHub Personal Access Token
+- GitHub App (registered with private key and installation ID)
 
 ### Install
 
@@ -163,8 +165,10 @@ uv run codebot serve --port 5000
 Codebot uses environment variables for configuration:
 
 ```bash
-# Required
-export GITHUB_TOKEN="your_github_token"
+# Required - GitHub App configuration
+export GITHUB_APP_ID="123456"
+export GITHUB_APP_PRIVATE_KEY_PATH="./codebot-private-key.pem"
+export GITHUB_APP_INSTALLATION_ID="789012"
 
 # For webhook server
 export GITHUB_WEBHOOK_SECRET="your_webhook_secret"
@@ -176,7 +180,9 @@ export CODEBOT_API_KEYS="secret-key-1,secret-key-2"
 Or create a `.env` file:
 
 ```
-GITHUB_TOKEN=your_github_token
+GITHUB_APP_ID=123456
+GITHUB_APP_PRIVATE_KEY_PATH=./codebot-private-key.pem
+GITHUB_APP_INSTALLATION_ID=789012
 GITHUB_WEBHOOK_SECRET=your_webhook_secret
 CODEBOT_API_KEYS=secret-key-1,secret-key-2
 ```
@@ -195,8 +201,7 @@ See [Architecture](docs/architecture.md) for technical details.
 
 ## Known Limitations
 
-- **Repository Cloning**: Each task clones the repository into a fresh workspace, which may be slow for large repositories with extensive history
-- **GitHub Identity**: Comments and PRs are created using your Personal Access Token, so they appear under your GitHub account rather than as a bot user. For production use, we should consider creating a GitHub App for proper bot identity 
+- **Repository Cloning**: Each task clones the repository into a fresh workspace, which may be slow for large repositories with extensive history 
 
 ## Future Plans
 - Slack support: Assign a task to codebot from slack

@@ -8,7 +8,8 @@ from pathlib import Path
 import click
 from dotenv import load_dotenv
 
-from codebot.core.utils import validate_github_token
+from codebot.core.github_app import GitHubAppAuth
+from codebot.core.utils import validate_github_app_config
 
 
 @click.command(name="serve")
@@ -23,12 +24,6 @@ from codebot.core.utils import validate_github_token
     type=click.Path(),
     default=None,
     help="Base directory for work spaces (defaults to ./codebot_workspace)",
-)
-@click.option(
-    "--github-token",
-    type=str,
-    default=None,
-    help="GitHub token (defaults to GITHUB_TOKEN env var or .env file)",
 )
 @click.option(
     "--webhook-secret",
@@ -56,7 +51,6 @@ from codebot.core.utils import validate_github_token
 def serve(
     port: int,
     work_dir: str,
-    github_token: str,
     webhook_secret: str,
     debug: bool,
     api_key: str,
@@ -78,6 +72,11 @@ def serve(
     - Set CODEBOT_WEB_USERNAME and CODEBOT_WEB_PASSWORD env vars for authentication
     - View all tasks, filter by status/source, and see task details
     
+    Before running, configure GitHub App credentials:
+    - Set GITHUB_APP_ID environment variable
+    - Set GITHUB_APP_PRIVATE_KEY_PATH environment variable (path to private key file)
+    - Set GITHUB_APP_INSTALLATION_ID environment variable
+    
     Before running, configure a GitHub webhook:
     1. Go to repository Settings > Webhooks
     2. Add webhook URL: https://your-server.com/webhook
@@ -91,20 +90,34 @@ def serve(
     """
     load_dotenv()
     
-    # Get GitHub token
-    effective_token = github_token or os.getenv("GITHUB_TOKEN")
-    
-    if not effective_token:
-        click.echo("Error: GitHub token is required. Set GITHUB_TOKEN env var or use --github-token", err=True)
+    # Validate GitHub App configuration
+    print("Validating GitHub App configuration...")
+    is_valid, error_type = validate_github_app_config(verbose=True)
+    if not is_valid:
+        if error_type == "config_missing":
+            click.echo("Error: GitHub App configuration not found. Please set the required environment variables.", err=True)
+            click.echo("Required environment variables:", err=True)
+            click.echo("  - GITHUB_APP_ID", err=True)
+            click.echo("  - GITHUB_APP_PRIVATE_KEY_PATH", err=True)
+            click.echo("  - GITHUB_APP_INSTALLATION_ID", err=True)
+        elif error_type == "installation_not_found":
+            click.echo("Error: GitHub App installation not found (404).", err=True)
+            click.echo("This usually means:", err=True)
+            click.echo("  1. The GITHUB_APP_INSTALLATION_ID is incorrect", err=True)
+            click.echo("  2. The GitHub App is not installed on the target repositories", err=True)
+            click.echo("  3. The API URL is incorrect (check GITHUB_ENTERPRISE_URL if using GitHub Enterprise)", err=True)
+            click.echo("", err=True)
+            click.echo("To find your installation ID:", err=True)
+            click.echo("  - Check the GitHub App installation URL: https://github.com/settings/installations/<ID>", err=True)
+            click.echo("  - Or use the API: curl -H 'Authorization: Bearer <JWT>' https://api.github.com/app/installations", err=True)
+        else:
+            click.echo(f"Error: Invalid GitHub App configuration: {error_type}", err=True)
+            click.echo("Please check your configuration and try again.", err=True)
         sys.exit(1)
+    print("GitHub App configuration validated successfully")
     
-    # Validate GitHub token
-    print("Validating GitHub token...")
-    if not validate_github_token(effective_token, verbose=True):
-        click.echo("Error: Invalid GitHub token. Please check your token and try again.", err=True)
-        click.echo("Make sure your token has the correct permissions (repo access for private repos).", err=True)
-        sys.exit(1)
-    print("GitHub token validated successfully")
+    # Create GitHub App auth instance
+    github_app_auth = GitHubAppAuth()
     
     # Get webhook secret
     effective_secret = webhook_secret or os.getenv("GITHUB_WEBHOOK_SECRET")
@@ -161,7 +174,7 @@ def serve(
     review_processor = ReviewProcessor(
         review_queue=review_queue,
         workspace_base_dir=work_base_dir,
-        github_token=effective_token,
+        github_app_auth=github_app_auth,
     )
     
     review_processor_thread = threading.Thread(target=review_processor.start, daemon=True)
@@ -178,7 +191,7 @@ def serve(
         task_processor = TaskProcessor(
             task_queue=task_queue,
             workspace_base_dir=work_base_dir,
-            github_token=effective_token,
+            github_app_auth=github_app_auth,
             num_workers=workers,
         )
         task_processor.start()

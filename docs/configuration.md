@@ -6,31 +6,57 @@ Configure Codebot using environment variables and command-line options.
 
 ### Core Configuration
 
-#### GITHUB_TOKEN
+#### GITHUB_APP_ID
 
 **Required**: Yes  
-**Description**: GitHub Personal Access Token for API access  
-**Example**: `ghp_xxxxxxxxxxxxxxxxxxxx`
+**Description**: GitHub App ID (numeric)  
+**Example**: `123456`
 
 ```bash
-export GITHUB_TOKEN="your_github_token_here"
+export GITHUB_APP_ID="123456"
 ```
 
 Or in `.env` file:
 
 ```
-GITHUB_TOKEN=your_github_token_here
+GITHUB_APP_ID=123456
 ```
 
-**Required Permissions:**
+#### GITHUB_APP_PRIVATE_KEY_PATH
 
-Classic Token:
-- ✅ `repo` (full repository access)
+**Required**: Yes  
+**Description**: Path to GitHub App private key file (.pem)  
+**Example**: `/path/to/private-key.pem` or `./codebot-private-key.pem`
 
-Fine-Grained Token:
-- ✅ Pull requests: Read and Write
-- ✅ Contents: Read and Write
-- ✅ Metadata: Read (automatic)
+```bash
+export GITHUB_APP_PRIVATE_KEY_PATH="/path/to/private-key.pem"
+```
+
+Or in `.env` file:
+
+```
+GITHUB_APP_PRIVATE_KEY_PATH=./codebot-private-key.pem
+```
+
+**Note**: The private key file must be readable by the codebot process. Keep it secure and never commit it to version control.
+
+#### GITHUB_APP_INSTALLATION_ID
+
+**Required**: Yes  
+**Description**: GitHub App Installation ID (numeric)  
+**Example**: `789012`
+
+```bash
+export GITHUB_APP_INSTALLATION_ID="789012"
+```
+
+Or in `.env` file:
+
+```
+GITHUB_APP_INSTALLATION_ID=789012
+```
+
+**Note**: This is the installation ID for your GitHub App. You can find it in your GitHub App settings or via the API.
 
 #### GITHUB_WEBHOOK_SECRET
 
@@ -88,8 +114,12 @@ export CODEBOT_TASK_RETENTION=172800  # 48 hours
 Create a `.env` file in your project directory:
 
 ```bash
-# GitHub Configuration
-GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+# GitHub App Configuration
+GITHUB_APP_ID=123456
+GITHUB_APP_PRIVATE_KEY_PATH=./codebot-private-key.pem
+GITHUB_APP_INSTALLATION_ID=789012
+
+# GitHub Webhook Configuration
 GITHUB_WEBHOOK_SECRET=your_webhook_secret_here
 
 # GitHub Enterprise Configuration (if using enterprise)
@@ -118,7 +148,6 @@ codebot run [OPTIONS]
 - `--task-prompt TEXT` - Task prompt as JSON or YAML string
 - `--task-prompt-file PATH` - Path to task prompt file
 - `--work-dir PATH` - Base directory for workspaces (default: `./codebot_workspace`)
-- `--github-token TEXT` - GitHub token (overrides env var)
 - `--verbose` - Enable verbose output
 
 ### codebot serve
@@ -131,34 +160,55 @@ codebot serve [OPTIONS]
 
 - `--port INTEGER` - Server port (default: 5000)
 - `--work-dir PATH` - Base directory for workspaces
-- `--github-token TEXT` - GitHub token (overrides env var)
 - `--webhook-secret TEXT` - Webhook secret (overrides env var)
 - `--api-key TEXT` - API key (overrides env var)
 - `--workers INTEGER` - Number of worker threads (default: 1)
 - `--debug` - Enable debug mode with auto-reload
 
-## GitHub Token Scopes
+## GitHub App Setup
 
-### For CLI Usage
+### Creating a GitHub App
 
-Minimum required:
-- Create pull requests
-- Push to repositories
-- Read repository contents
+1. Go to your organization or user settings → Developer settings → GitHub Apps
+2. Click "New GitHub App"
+3. Fill in app details:
+   - **Name**: codebot-007 (or your preferred name)
+   - **Homepage URL**: Your app homepage
+   - **Webhook URL**: Your webhook endpoint (for webhook server)
+   - **Webhook secret**: Set `GITHUB_WEBHOOK_SECRET` environment variable
+4. Set required permissions:
+   - **Repository permissions**:
+     - Contents: Read and Write
+     - Pull requests: Read and Write
+     - Metadata: Read-only
+5. Subscribe to webhook events (for webhook server):
+   - Pull request review comments
+   - Pull request reviews
+   - Issue comments
+6. Click "Create GitHub App"
 
-### For Webhook Server
+### Installing the GitHub App
 
-Additional requirements:
-- Read PR details and comments
-- Post comments on PRs
-- Update PR descriptions
+1. After creating the app, go to the app settings
+2. Click "Install App"
+3. Select the organization or repositories where you want to install it
+4. Note the **Installation ID** from the URL or API response
+5. Set `GITHUB_APP_INSTALLATION_ID` environment variable
 
-### Creating a Token
+### Generating Private Key
 
-1. Go to GitHub Settings → Developer settings → Personal access tokens
-2. Generate new token (classic or fine-grained)
-3. Select required scopes
-4. Copy token and store securely
+1. In your GitHub App settings, scroll to "Private keys"
+2. Click "Generate a private key"
+3. Download the `.pem` file
+4. Store it securely (never commit to version control)
+5. Set `GITHUB_APP_PRIVATE_KEY_PATH` environment variable to the file path
+
+### Required Permissions
+
+The GitHub App needs the following permissions:
+- **Contents**: Read and Write (for cloning, pushing, and reading files)
+- **Pull requests**: Read and Write (for creating PRs and commenting)
+- **Metadata**: Read-only (automatic, for repository access)
 
 ## Workspace Configuration
 

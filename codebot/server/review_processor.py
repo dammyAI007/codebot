@@ -1,12 +1,12 @@
 """Process PR review comments from the queue."""
 
-import os
 import time
 from pathlib import Path
 from queue import Empty, Queue
 from typing import Optional
 
 from codebot.core.environment import EnvironmentManager
+from codebot.core.github_app import GitHubAppAuth
 from codebot.core.git_ops import GitOps
 from codebot.core.github_pr import GitHubPR
 from codebot.core.models import TaskPrompt
@@ -21,7 +21,7 @@ class ReviewProcessor:
         self,
         review_queue: Queue,
         workspace_base_dir: Path,
-        github_token: str,
+        github_app_auth: GitHubAppAuth,
     ):
         """
         Initialize the review processor.
@@ -29,12 +29,12 @@ class ReviewProcessor:
         Args:
             review_queue: Queue containing review comments to process
             workspace_base_dir: Base directory for workspaces
-            github_token: GitHub personal access token
+            github_app_auth: GitHub App authentication instance
         """
         self.review_queue = review_queue
         self.workspace_base_dir = workspace_base_dir
-        self.github_token = github_token
-        self.github_pr = GitHubPR(github_token)
+        self.github_app_auth = github_app_auth
+        self.github_pr = GitHubPR(github_app_auth)
         self.running = False
     
     def start(self):
@@ -196,7 +196,7 @@ class ReviewProcessor:
             return
         
         # Check if changes were made
-        git_ops = GitOps(workspace_path, github_token=self.github_token)
+        git_ops = GitOps(workspace_path, github_app_auth=self.github_app_auth)
         
         if is_change_request:
             try:
@@ -296,7 +296,7 @@ class ReviewProcessor:
                 env_manager = EnvironmentManager(
                     base_dir=self.workspace_base_dir,
                     task=task,
-                    github_token=self.github_token,
+                    github_app_auth=self.github_app_auth,
                 )
                 
                 try:
@@ -320,7 +320,7 @@ class ReviewProcessor:
         env_manager = EnvironmentManager(
             base_dir=self.workspace_base_dir,
             task=task,
-            github_token=self.github_token,
+            github_app_auth=self.github_app_auth,
         )
         
         try:

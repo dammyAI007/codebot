@@ -12,7 +12,7 @@ Before installing Codebot, ensure you have the following:
 - **uv package manager** - For dependency management
 - **Claude Code CLI** - The AI agent that performs code changes
 - **Git** - Configured with authentication for cloning repositories
-- **GitHub Personal Access Token** - For creating pull requests and API access
+- **GitHub App** - Registered GitHub App with private key and installation ID
 
 ### System Requirements
 
@@ -66,31 +66,44 @@ codebot --help
 
 **Note:** You need to activate the virtual environment each time you open a new terminal, or use `uv run codebot` as a shortcut without activation.
 
-## Step 4: Configure GitHub Token
+## Step 4: Configure GitHub App
 
-Codebot needs a GitHub Personal Access Token to create pull requests and interact with the GitHub API.
+Codebot uses a GitHub App for authentication, allowing it to act with its own identity instead of a user's identity.
 
-### Create a GitHub Token
+### Create a GitHub App
 
-1. Go to GitHub Settings → Developer settings → Personal access tokens
-2. Click "Generate new token" (classic or fine-grained)
+1. Go to your organization or user settings → Developer settings → GitHub Apps
+2. Click "New GitHub App"
+3. Fill in app details:
+   - **Name**: codebot-007 (or your preferred name)
+   - **Homepage URL**: Your app homepage
+   - **Webhook URL**: Your webhook endpoint (if using webhook server)
+4. Set required permissions:
+   - **Contents**: Read and Write
+   - **Pull requests**: Read and Write
+   - **Metadata**: Read-only (automatic)
+5. Click "Create GitHub App"
 
-### Required Permissions
+### Install the GitHub App
 
-**For Classic Tokens:**
-- ✅ `repo` (full repository access)
+1. After creating the app, click "Install App"
+2. Select the organization or repositories where you want to install it
+3. Note the **Installation ID** from the URL (e.g., `https://github.com/settings/installations/123456`)
 
-**For Fine-Grained Tokens:**
-- ✅ **Pull requests**: Read and Write
-- ✅ **Contents**: Read and Write
-- ✅ **Metadata**: Read (automatic)
+### Generate Private Key
 
-### Set the Token
+1. In your GitHub App settings, scroll to "Private keys"
+2. Click "Generate a private key"
+3. Download the `.pem` file and store it securely (never commit to version control)
 
-**Option 1: Environment Variable**
+### Set Configuration
+
+**Option 1: Environment Variables**
 
 ```bash
-export GITHUB_TOKEN="your_github_token_here"
+export GITHUB_APP_ID="123456"
+export GITHUB_APP_PRIVATE_KEY_PATH="/path/to/private-key.pem"
+export GITHUB_APP_INSTALLATION_ID="789012"
 ```
 
 **Option 2: .env File**
@@ -98,8 +111,12 @@ export GITHUB_TOKEN="your_github_token_here"
 Create a `.env` file in your project directory:
 
 ```bash
-GITHUB_TOKEN=your_github_token_here
+GITHUB_APP_ID=123456
+GITHUB_APP_PRIVATE_KEY_PATH=./codebot-private-key.pem
+GITHUB_APP_INSTALLATION_ID=789012
 ```
+
+See [Configuration Guide](configuration.md) for detailed GitHub App setup instructions.
 
 ## Step 5: Verify Installation
 

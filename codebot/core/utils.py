@@ -4,68 +4,64 @@ import hashlib
 import os
 import uuid
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 from urllib.parse import urlparse
 
 
-def validate_github_token(token: str, api_url: Optional[str] = None, repository_url: Optional[str] = None, verbose: bool = False) -> bool:
+def validate_github_app_config(api_url: Optional[str] = None, repository_url: Optional[str] = None, verbose: bool = False) -> Tuple[bool, Optional[str]]:
     """
-    Validate a GitHub token by making a simple API call.
+    Validate GitHub App configuration by testing authentication.
     
     Args:
-        token: GitHub personal access token
         api_url: Optional API URL (auto-detected if not provided)
         repository_url: Optional repository URL to derive API URL from
         verbose: Enable verbose logging for debugging
         
     Returns:
-        True if token is valid, False otherwise
+        Tuple of (is_valid, error_message). error_message is None if valid.
     """
+    from codebot.core.github_app import GitHubAppAuth
     import requests
     
-    if not api_url:
-        api_url = detect_github_api_url(repository_url=repository_url, verbose=verbose)
-    
-    if verbose:
-        print(f"  → Using API URL: {api_url}")
-        print(f"  → Token starts with: {token[:8]}{'*' * (len(token) - 8) if len(token) > 8 else '***'}")
-    
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-    
     try:
-        if verbose:
-            print(f"  → Making request to: {api_url}/user")
-        
-        response = requests.get(f"{api_url}/user", headers=headers, timeout=10)
+        if not api_url:
+            api_url = detect_github_api_url(repository_url=repository_url, verbose=verbose)
         
         if verbose:
-            print(f"  → Response status: {response.status_code}")
-            if response.status_code != 200:
-                print(f"  → Response headers: {dict(response.headers)}")
-                try:
-                    error_data = response.json()
-                    print(f"  → Response body: {error_data}")
-                    
-                    # Check for common GitHub Enterprise issues
-                    if response.status_code == 401:
-                        print("  → Status 401: Unauthorized - Token may be invalid or expired")
-                    elif response.status_code == 403:
-                        print("  → Status 403: Forbidden - Token may lack required permissions")
-                    elif response.status_code == 404:
-                        print("  → Status 404: Not Found - API endpoint may be incorrect (check GitHub Enterprise URL)")
-                except Exception:
-                    print(f"  → Response text: {response.text[:200]}...")
-                    if response.status_code == 404:
-                        print("  → Status 404: Check if GITHUB_ENTERPRISE_URL is correct for your GitHub instance")
+            print(f"  → Using API URL: {api_url}")
+            print("  → Validating GitHub App configuration...")
         
-        return response.status_code == 200
+        github_app_auth = GitHubAppAuth(api_url=api_url)
+        
+        if verbose:
+            print("  → GitHub App configuration loaded successfully")
+            print("  → Testing authentication by getting installation token...")
+        
+        token = github_app_auth.get_installation_token()
+        
+        if verbose:
+            print(f"  → Installation token obtained successfully (starts with: {token[:8]}...)")
+            print("  → GitHub App configuration is valid")
+        
+        # If we can get the installation token, the configuration is valid
+        # The token itself will be validated when making actual API calls
+        return True, None
+    except RuntimeError as e:
+        error_msg = str(e)
+        if verbose:
+            print(f"  → Configuration error: {error_msg}")
+        
+        # Check if it's a "not found" error (missing env vars) vs API error
+        if "not found" in error_msg.lower() and ("GITHUB_APP" in error_msg or "environment variable" in error_msg):
+            return False, "config_missing"
+        elif "404" in error_msg or "Not Found" in error_msg:
+            return False, "installation_not_found"
+        else:
+            return False, error_msg
     except requests.RequestException as e:
         if verbose:
             print(f"  → Request failed with exception: {type(e).__name__}: {str(e)}")
-        return False
+        return False, "api_error"
 
 
 def detect_github_info(repository_url: str) -> Dict[str, str]:

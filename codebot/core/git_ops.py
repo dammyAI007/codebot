@@ -1,26 +1,26 @@
 """Git operations for committing and pushing changes."""
 
-import os
 import subprocess
 from pathlib import Path
 from typing import Optional
 
+from codebot.core.github_app import GitHubAppAuth
 from codebot.core.utils import get_git_env
 
 
 class GitOps:
     """Git operations for codebot."""
     
-    def __init__(self, work_dir: Path, github_token: Optional[str] = None):
+    def __init__(self, work_dir: Path, github_app_auth: Optional[GitHubAppAuth] = None):
         """
         Initialize git operations.
         
         Args:
             work_dir: Working directory with git repository
-            github_token: Optional GitHub token for authenticated operations
+            github_app_auth: Optional GitHub App authentication instance
         """
         self.work_dir = work_dir
-        self.github_token = github_token
+        self.github_app_auth = github_app_auth
     
     def _get_git_env(self) -> dict:
         """Get git environment variables for non-interactive operation."""
@@ -39,7 +39,7 @@ class GitOps:
         from urllib.parse import urlparse
         from codebot.core.utils import is_github_url
         
-        if not self.github_token or not is_github_url(repository_url):
+        if not self.github_app_auth or not is_github_url(repository_url):
             return repository_url
         
         parsed = urlparse(repository_url)
@@ -51,8 +51,11 @@ class GitOps:
         if not path.endswith(".git"):
             path += ".git"
         
+        # Get installation token from GitHub App auth
+        token = self.github_app_auth.get_installation_token()
+        
         # Build authenticated URL using oauth2 format
-        auth_url = f"https://oauth2:{self.github_token}@{parsed.netloc}{path}"
+        auth_url = f"https://oauth2:{token}@{parsed.netloc}{path}"
         return auth_url
     
     def _get_remote_url(self) -> Optional[str]:
@@ -128,9 +131,9 @@ class GitOps:
         """
         env = self._get_git_env()
         
-        # For GitHub repositories with token, temporarily use authenticated URL
+        # For GitHub repositories with GitHub App auth, temporarily use authenticated URL
         original_url = None
-        if self.github_token:
+        if self.github_app_auth:
             original_url = self._get_remote_url()
             if original_url:
                 auth_url = self._create_authenticated_url(original_url)
@@ -155,7 +158,7 @@ class GitOps:
             
         finally:
             # Restore original URL for security
-            if original_url and self.github_token:
+            if original_url and self.github_app_auth:
                 print("Restoring clean remote URL...")
                 self._set_remote_url(original_url)
     

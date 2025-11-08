@@ -33,45 +33,63 @@ Common issues and solutions for Codebot setup, configuration, and usage.
 
 2. If not found, install following the [official documentation](https://www.anthropic.com/claude/docs/claude-code).
 
-## GitHub Token Issues
+## GitHub App Configuration Issues
 
-### Token validation failed
+### GitHub App configuration validation failed
 
-**Problem**: "Invalid GitHub token" or token validation errors.
-
-**Solutions**:
-1. **Check token hasn't expired**
-   - Go to GitHub Settings → Developer settings → Personal access tokens
-   - Verify your token is still active
-
-2. **Verify token has required scopes**
-   - Classic Token: ✅ `repo` (full repository access)
-   - Fine-Grained Token: ✅ Pull requests: Read and Write, ✅ Contents: Read and Write, ✅ Metadata: Read
-
-3. **Test token manually**:
-   ```bash
-   curl -H "Authorization: token YOUR_TOKEN" https://api.github.com/user
-   ```
-   
-   For GitHub Enterprise:
-   ```bash
-   curl -H "Authorization: token YOUR_TOKEN" https://github.company.com/api/v3/user
-   ```
-
-4. **For GitHub Enterprise**:
-   - Ensure you're using a token from the enterprise instance
-   - Set `GITHUB_ENTERPRISE_URL` and optionally `GITHUB_API_URL`
-   - Verify the API URL is correct for your enterprise instance
-
-### Invalid GitHub token (CLI tasks)
-
-**Problem**: Task fails with "Invalid GitHub token" error.
+**Problem**: "Invalid GitHub App configuration" or authentication errors.
 
 **Solutions**:
-1. Ensure `GITHUB_TOKEN` environment variable is set
-2. Verify token has correct permissions (see above)
-3. For private repositories, ensure token has `repo` scope
-4. See [Configuration Guide](configuration.md) for detailed token setup
+1. **Verify all required environment variables are set**
+   - `GITHUB_APP_ID` - Must be a numeric value
+   - `GITHUB_APP_PRIVATE_KEY_PATH` - Path to the private key file
+   - `GITHUB_APP_INSTALLATION_ID` - Must be a numeric value
+
+2. **Check private key file**
+   - Ensure the file exists at the specified path
+   - Verify the file is readable by the codebot process
+   - Check that the file is a valid PEM format private key
+   - Ensure the file hasn't been corrupted
+
+3. **Verify GitHub App ID**
+   - Check that the App ID matches your GitHub App
+   - Find it in your GitHub App settings page
+
+4. **Verify Installation ID**
+   - Check that the installation ID is correct
+   - Find it in the GitHub App installation URL or via API:
+     ```bash
+     curl -H "Authorization: Bearer YOUR_JWT" https://api.github.com/app/installations
+     ```
+   - Ensure the app is installed on the repositories you're trying to access
+
+5. **For GitHub Enterprise**:
+   - Ensure `GITHUB_ENTERPRISE_URL` or `GITHUB_API_URL` is set correctly
+   - Verify the API URL format: `https://github.company.com/api/v3`
+   - Ensure you're using the correct GitHub App from the enterprise instance
+
+### Invalid GitHub App configuration (CLI tasks)
+
+**Problem**: Task fails with "Invalid GitHub App configuration" error.
+
+**Solutions**:
+1. Ensure all three required environment variables are set:
+   - `GITHUB_APP_ID`
+   - `GITHUB_APP_PRIVATE_KEY_PATH`
+   - `GITHUB_APP_INSTALLATION_ID`
+
+2. Verify the private key file path is correct and the file exists
+
+3. Check that the GitHub App has the required permissions:
+   - Contents: Read and Write
+   - Pull requests: Read and Write
+   - Metadata: Read-only
+
+4. Ensure the GitHub App is installed on the repositories you're accessing
+
+5. Run with `--verbose` flag for detailed debugging information
+
+6. See [Configuration Guide](configuration.md) for detailed GitHub App setup
 
 ### PR creation fails
 

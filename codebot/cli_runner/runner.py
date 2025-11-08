@@ -9,11 +9,12 @@ from pathlib import Path
 import click
 from dotenv import load_dotenv
 
+from codebot.core.github_app import GitHubAppAuth
 from codebot.core.models import Task
 from codebot.core.orchestrator import Orchestrator
 from codebot.core.parser import parse_task_prompt, parse_task_prompt_file
 from codebot.core.task_store import global_task_store
-from codebot.core.utils import validate_github_token
+from codebot.core.utils import validate_github_app_config
 
 
 @click.command(name="run")
@@ -34,12 +35,6 @@ from codebot.core.utils import validate_github_token
     help="Base directory for work spaces (defaults to ./codebot_workspace)",
 )
 @click.option(
-    "--github-token",
-    type=str,
-    default=None,
-    help="GitHub token (defaults to GITHUB_TOKEN env var or .env file)",
-)
-@click.option(
     "--verbose",
     is_flag=True,
     help="Enable verbose output",
@@ -48,7 +43,6 @@ def run(
     task_prompt: str,
     task_prompt_file: str,
     work_dir: str,
-    github_token: str,
     verbose: bool,
 ) -> None:
     """
@@ -91,45 +85,51 @@ def run(
     
     work_base_dir.mkdir(parents=True, exist_ok=True)
     
-    # Get GitHub token from flag, environment variable, or .env file
-    effective_token = github_token or os.getenv("GITHUB_TOKEN")
+    # Validate GitHub App configuration
+    print("Validating GitHub App configuration...")
+    if verbose:
+        print("Debug information:")
+        # Show environment variables that affect GitHub API detection
+        github_api_url = os.getenv("GITHUB_API_URL")
+        github_enterprise_url = os.getenv("GITHUB_ENTERPRISE_URL")
+        if github_api_url:
+            print(f"  → GITHUB_API_URL: {github_api_url}")
+        if github_enterprise_url:
+            print(f"  → GITHUB_ENTERPRISE_URL: {github_enterprise_url}")
+        if not github_api_url and not github_enterprise_url:
+            print("  → No GitHub Enterprise environment variables set, using github.com")
+        print(f"  → Repository URL from task: {task.repository_url}")
     
-    # Validate GitHub token if available
-    if effective_token:
-        print("Validating GitHub token...")
-        if verbose:
-            print("Debug information:")
-            # Show environment variables that affect GitHub API detection
-            github_api_url = os.getenv("GITHUB_API_URL")
-            github_enterprise_url = os.getenv("GITHUB_ENTERPRISE_URL")
-            if github_api_url:
-                print(f"  → GITHUB_API_URL: {github_api_url}")
-            if github_enterprise_url:
-                print(f"  → GITHUB_ENTERPRISE_URL: {github_enterprise_url}")
-            if not github_api_url and not github_enterprise_url:
-                print("  → No GitHub Enterprise environment variables set, using github.com")
-            print(f"  → Repository URL from task: {task.repository_url}")
-        
-        if not validate_github_token(effective_token, repository_url=task.repository_url, verbose=verbose):
-            click.echo("Error: Invalid GitHub token. Please check your token and try again.", err=True)
-            click.echo("Make sure your token has the correct permissions (repo access for private repos).", err=True)
+    is_valid, error_type = validate_github_app_config(repository_url=task.repository_url, verbose=verbose)
+    if not is_valid:
+        if error_type == "config_missing":
+            click.echo("Error: GitHub App configuration not found. Please set the required environment variables.", err=True)
+            click.echo("Required environment variables:", err=True)
+            click.echo("  - GITHUB_APP_ID", err=True)
+            click.echo("  - GITHUB_APP_PRIVATE_KEY_PATH", err=True)
+            click.echo("  - GITHUB_APP_INSTALLATION_ID", err=True)
+        elif error_type == "installation_not_found":
+            click.echo("Error: GitHub App installation not found (404).", err=True)
+            click.echo("This usually means:", err=True)
+            click.echo("  1. The GITHUB_APP_INSTALLATION_ID is incorrect", err=True)
+            click.echo("  2. The GitHub App is not installed on the target repositories", err=True)
+            click.echo("  3. The API URL is incorrect (check GITHUB_ENTERPRISE_URL if using GitHub Enterprise)", err=True)
             click.echo("", err=True)
-            click.echo("Troubleshooting tips:", err=True)
-            click.echo("1. Verify your token hasn't expired", err=True)
-            click.echo("2. Check that your token has 'repo' scope for private repositories", err=True)
-            click.echo("3. For GitHub Enterprise, ensure you're using the enterprise token", err=True)
-            
-            # Show the correct API URL for manual testing
-            from codebot.core.utils import detect_github_api_url
-            api_url = detect_github_api_url(repository_url=task.repository_url)
-            click.echo(f"4. Test your token manually: curl -H 'Authorization: token YOUR_TOKEN' {api_url}/user", err=True)
-            
-            if verbose:
-                click.echo("5. Run with --verbose flag for detailed debugging information", err=True)
-            sys.exit(1)
-        print("GitHub token validated successfully")
-    else:
-        print("Warning: No GitHub token found. This may cause issues with private repositories.")
+            click.echo("To find your installation ID:", err=True)
+            click.echo("  - Check the GitHub App installation URL: https://github.com/settings/installations/<ID>", err=True)
+            click.echo("  - Or use the API: curl -H 'Authorization: Bearer <JWT>' https://api.github.com/app/installations", err=True)
+        else:
+            click.echo(f"Error: Invalid GitHub App configuration: {error_type}", err=True)
+            click.echo("Please check your configuration and try again.", err=True)
+        
+        if verbose:
+            click.echo("", err=True)
+            click.echo("Run with --verbose flag for detailed debugging information", err=True)
+        sys.exit(1)
+    print("GitHub App configuration validated successfully")
+    
+    # Create GitHub App auth instance
+    github_app_auth = GitHubAppAuth()
     
     # Create task tracking object
     task_id = str(uuid.uuid4())
@@ -149,7 +149,7 @@ def run(
         orchestrator = Orchestrator(
             task=task,
             work_base_dir=work_base_dir,
-            github_token=effective_token,
+            github_app_auth=github_app_auth,
         )
         orchestrator.run()
         

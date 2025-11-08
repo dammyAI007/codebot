@@ -6,6 +6,7 @@ from pathlib import Path
 from queue import Empty
 from typing import Optional
 
+from codebot.core.github_app import GitHubAppAuth
 from codebot.core.orchestrator import Orchestrator
 from codebot.server.task_queue import TaskQueue
 
@@ -17,7 +18,7 @@ class TaskProcessor:
         self,
         task_queue: TaskQueue,
         workspace_base_dir: Path,
-        github_token: str,
+        github_app_auth: GitHubAppAuth,
         num_workers: int = 1,
     ):
         """
@@ -26,12 +27,12 @@ class TaskProcessor:
         Args:
             task_queue: Task queue instance
             workspace_base_dir: Base directory for workspaces
-            github_token: GitHub token for API access
+            github_app_auth: GitHub App authentication instance
             num_workers: Number of worker threads
         """
         self.task_queue = task_queue
         self.workspace_base_dir = workspace_base_dir
-        self.github_token = github_token
+        self.github_app_auth = github_app_auth
         self.num_workers = num_workers
         self.running = False
         self.workers = []
@@ -113,7 +114,7 @@ class TaskProcessor:
             orchestrator = Orchestrator(
                 task=task.prompt,
                 work_base_dir=self.workspace_base_dir,
-                github_token=self.github_token,
+                github_app_auth=self.github_app_auth,
             )
             
             # Run task

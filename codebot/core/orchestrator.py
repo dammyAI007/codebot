@@ -1,6 +1,5 @@
 """Main orchestrator for codebot tasks."""
 
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -9,6 +8,7 @@ from typing import Optional
 from codebot.claude.md_detector import get_claude_md_warning
 from codebot.claude.runner import ClaudeRunner
 from codebot.core.environment import EnvironmentManager
+from codebot.core.github_app import GitHubAppAuth
 from codebot.core.git_ops import GitOps
 from codebot.core.github_pr import GitHubPR
 from codebot.core.models import TaskPrompt
@@ -21,7 +21,7 @@ class Orchestrator:
         self,
         task: TaskPrompt,
         work_base_dir: Path,
-        github_token: Optional[str] = None,
+        github_app_auth: Optional[GitHubAppAuth] = None,
     ):
         """
         Initialize the orchestrator.
@@ -29,11 +29,15 @@ class Orchestrator:
         Args:
             task: Task prompt with repository and task details
             work_base_dir: Base directory for creating work spaces
-            github_token: Optional GitHub token (defaults to GITHUB_TOKEN env var)
+            github_app_auth: Optional GitHub App authentication instance (created if not provided)
         """
         self.task = task
         self.work_base_dir = work_base_dir
-        self.github_token = github_token or os.getenv("GITHUB_TOKEN")
+        
+        if github_app_auth is None:
+            github_app_auth = GitHubAppAuth()
+        
+        self.github_app_auth = github_app_auth
         
         self.env_manager: Optional[EnvironmentManager] = None
         self.claude_runner: Optional[ClaudeRunner] = None
@@ -101,7 +105,7 @@ class Orchestrator:
     
     def _setup_environment(self) -> None:
         """Setup the isolated environment."""
-        self.env_manager = EnvironmentManager(self.work_base_dir, self.task, self.github_token)
+        self.env_manager = EnvironmentManager(self.work_base_dir, self.task, self.github_app_auth)
         self.work_dir = self.env_manager.setup_environment()
         print(f"Environment setup complete: {self.work_dir}")
     
@@ -122,7 +126,7 @@ class Orchestrator:
             return
         
         self.claude_runner = ClaudeRunner(self.work_dir)
-        self.git_ops = GitOps(self.work_dir, github_token=self.github_token)
+        self.git_ops = GitOps(self.work_dir, github_app_auth=self.github_app_auth)
         
         # Capture git state before Claude runs
         before_commit = self.git_ops.get_latest_commit_hash()
@@ -222,7 +226,7 @@ class Orchestrator:
         if not self.work_dir:
             return
         
-        self.git_ops = GitOps(self.work_dir, github_token=self.github_token)
+        self.git_ops = GitOps(self.work_dir, github_app_auth=self.github_app_auth)
         
         if self.git_ops.has_uncommitted_changes():
             print("WARNING: Uncommitted changes detected")
@@ -248,7 +252,7 @@ class Orchestrator:
         if not self.env_manager or not self.work_dir:
             return None
         
-        self.github_pr = GitHubPR(self.github_token)
+        self.github_pr = GitHubPR(self.github_app_auth)
         
         # Get commit message from the latest commit
         commit_message = None

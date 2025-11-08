@@ -1,43 +1,41 @@
 """GitHub pull request creation."""
 
-import os
 import re
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
 import requests
 
+from codebot.core.github_app import GitHubAppAuth
 from codebot.core.utils import detect_github_api_url, detect_github_info
 
 
 class GitHubPR:
     """Create pull requests on GitHub."""
     
-    def __init__(self, github_token: Optional[str] = None, api_url: Optional[str] = None):
+    def __init__(self, github_app_auth: Optional[GitHubAppAuth] = None, api_url: Optional[str] = None):
         """
         Initialize GitHub PR creator.
         
         Args:
-            github_token: GitHub personal access token (defaults to GITHUB_TOKEN env var or .env file)
+            github_app_auth: GitHub App authentication instance (created if not provided)
             api_url: GitHub API URL (auto-detected if not provided)
         """
-        self.token = github_token or os.getenv("GITHUB_TOKEN")
+        if github_app_auth is None:
+            github_app_auth = GitHubAppAuth(api_url=api_url)
         
-        if not self.token:
-            raise RuntimeError(
-                "GitHub token not found. Please set GITHUB_TOKEN environment variable or add it to a .env file."
-            )
+        self.github_app_auth = github_app_auth
         
         # Store API URL for later use - will be set per repository if not provided
         self.default_api_url = api_url or detect_github_api_url()
         
         # Cache for repository-specific API URLs
         self._repo_api_cache = {}
-        
-        self.headers = {
-            "Authorization": f"token {self.token}",
-            "Accept": "application/vnd.github.v3+json",
-        }
+    
+    @property
+    def headers(self) -> dict:
+        """Get authentication headers for GitHub API requests."""
+        return self.github_app_auth.get_auth_headers()
     
     def _get_api_url(self, repository_url: str) -> str:
         """
