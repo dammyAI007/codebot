@@ -1,5 +1,6 @@
 """Flask application setup and configuration."""
 
+from pathlib import Path
 from typing import Optional
 
 from flask import Flask, jsonify
@@ -18,7 +19,15 @@ def create_app(task_queue: Optional[TaskQueue] = None) -> Flask:
     Returns:
         Configured Flask app
     """
-    app = Flask(__name__)
+    server_dir = Path(__file__).parent
+    template_dir = server_dir / "templates"
+    static_dir = server_dir / "static"
+    
+    app = Flask(
+        __name__,
+        template_folder=str(template_dir),
+        static_folder=str(static_dir)
+    )
     
     # Register webhook handlers
     from codebot.server import webhook
@@ -29,6 +38,13 @@ def create_app(task_queue: Optional[TaskQueue] = None) -> Flask:
         webhook.handle_webhook,
         methods=["POST"]
     )
+    
+    # Register web UI blueprint
+    from codebot.server.web_ui import create_web_ui_blueprint
+    
+    web_ui_bp = create_web_ui_blueprint()
+    app.register_blueprint(web_ui_bp)
+    print("Web UI registered at /")
     
     # Register API blueprint if task queue is provided
     if task_queue:

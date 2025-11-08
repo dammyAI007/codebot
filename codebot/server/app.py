@@ -63,14 +63,20 @@ def serve(
     workers: int,
 ) -> None:
     """
-    Start webhook server to handle PR review comments and HTTP task submissions.
+    Start webhook server to handle PR review comments, HTTP task submissions, and web interface.
     
     This command starts a Flask server that:
+    - Provides a web interface for viewing and managing tasks (CLI and web-initiated)
     - Listens for GitHub webhook events for PR review comments
     - Provides HTTP API endpoints for task submission
     
     Example:
         codebot serve --port 5000 --workers 2
+    
+    Web Interface:
+    - Access at http://localhost:PORT/
+    - Set CODEBOT_WEB_USERNAME and CODEBOT_WEB_PASSWORD env vars for authentication
+    - View all tasks, filter by status/source, and see task details
     
     Before running, configure a GitHub webhook:
     1. Go to repository Settings > Webhooks
@@ -133,6 +139,7 @@ def serve(
     
     print(f"Starting server on port {port}...")
     print(f"Work directory: {work_base_dir}")
+    print(f"Web interface: http://localhost:{port}/")
     print(f"Health check: http://localhost:{port}/health")
     print(f"Webhook endpoint: http://localhost:{port}/webhook")
     

@@ -13,6 +13,8 @@ class ServerConfig:
         self.max_workers = self._load_max_workers()
         self.task_retention = self._load_task_retention()
         self.max_queue_size = self._load_max_queue_size()
+        self.web_username = self._load_web_username()
+        self.web_password = self._load_web_password()
     
     def _load_api_keys(self) -> List[str]:
         """Load API keys from environment."""
@@ -57,6 +59,31 @@ class ServerConfig:
     def has_api_keys(self) -> bool:
         """Check if any API keys are configured."""
         return len(self.api_keys) > 0
+    
+    def _load_web_username(self) -> Optional[str]:
+        """Load web interface username from environment."""
+        return os.getenv("CODEBOT_WEB_USERNAME", "admin")
+    
+    def _load_web_password(self) -> Optional[str]:
+        """Load web interface password from environment."""
+        return os.getenv("CODEBOT_WEB_PASSWORD")
+    
+    def has_web_auth(self) -> bool:
+        """Check if web authentication is configured."""
+        return self.web_password is not None
+    
+    def is_web_auth_valid(self, username: str, password: str) -> bool:
+        """
+        Check if web credentials are valid.
+        
+        Args:
+            username: Username to validate
+            password: Password to validate
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        return username == self.web_username and password == self.web_password
 
 
 # Global config instance

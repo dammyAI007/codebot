@@ -72,6 +72,7 @@ def create_api_blueprint(task_queue: TaskQueue) -> Blueprint:
                 prompt=prompt,
                 status="pending",
                 submitted_at=datetime.utcnow(),
+                source="web",
             )
             
             # Enqueue task

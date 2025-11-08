@@ -32,6 +32,7 @@ class Task:
     prompt: TaskPrompt
     status: str
     submitted_at: datetime
+    source: str = "web"
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     result: Optional[dict] = None

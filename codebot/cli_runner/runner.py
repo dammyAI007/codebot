@@ -2,14 +2,18 @@
 
 import os
 import sys
+import uuid
+from datetime import datetime
 from pathlib import Path
 
 import click
 from dotenv import load_dotenv
 
+from codebot.core.models import Task
 from codebot.core.orchestrator import Orchestrator
 from codebot.core.parser import parse_task_prompt, parse_task_prompt_file
 from codebot.core.utils import validate_github_token
+from codebot.server.task_store import global_task_store
 
 
 @click.command(name="run")
@@ -127,18 +131,57 @@ def run(
     else:
         print("Warning: No GitHub token found. This may cause issues with private repositories.")
     
+    # Create task tracking object
+    task_id = str(uuid.uuid4())
+    task_obj = Task(
+        id=task_id,
+        prompt=task,
+        status="pending",
+        submitted_at=datetime.utcnow(),
+        source="cli",
+    )
+    global_task_store.add_task(task_obj)
+    
     # Create and run orchestrator
     try:
+        global_task_store.update_task(task_id, status="running", started_at=datetime.utcnow())
+        
         orchestrator = Orchestrator(
             task=task,
             work_base_dir=work_base_dir,
             github_token=effective_token,
         )
         orchestrator.run()
+        
+        # Task completed successfully
+        result = {
+            "pr_url": orchestrator.pr_url,
+            "branch_name": orchestrator.branch_name,
+            "work_dir": str(orchestrator.work_dir) if orchestrator.work_dir else None,
+        }
+        global_task_store.update_task(
+            task_id,
+            status="completed",
+            completed_at=datetime.utcnow(),
+            result=result,
+        )
+        
     except KeyboardInterrupt:
         click.echo("\n\nInterrupted by user", err=True)
+        global_task_store.update_task(
+            task_id,
+            status="failed",
+            completed_at=datetime.utcnow(),
+            error="Interrupted by user",
+        )
         sys.exit(1)
     except Exception as e:
         click.echo(f"\nError: {e}", err=True)
+        global_task_store.update_task(
+            task_id,
+            status="failed",
+            completed_at=datetime.utcnow(),
+            error=str(e),
+        )
         sys.exit(1)
 

@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Codebot Tasks</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .status-badge {
+            font-size: 0.875rem;
+            padding: 0.25rem 0.5rem;
+        }
+        .source-badge {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.4rem;
+        }
+        .task-row {
+            cursor: pointer;
+        }
+        .task-row:hover {
+            background-color: #f8f9fa;
+        }
+        .description-cell {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .auto-refresh-indicator {
+            font-size: 0.75rem;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid mt-4">
+        <div class="row mb-4">
+            <div class="col">
+                <h1>Codebot Tasks</h1>
+            </div>
+            <div class="col-auto">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="auto-refresh-indicator">
+                        <span id="refresh-indicator">Auto-refresh: ON</span>
+                    </div>
+                    <select id="status-filter" class="form-select form-select-sm" style="width: auto;">
+                        <option value="">All Statuses</option>
+                        <option value="pending">Pending</option>
+                        <option value="running">Running</option>
+                        <option value="completed">Completed</option>
+                        <option value="failed">Failed</option>
+                    </select>
+                    <select id="source-filter" class="form-select form-select-sm" style="width: auto;">
+                        <option value="">All Sources</option>
+                        <option value="cli">CLI</option>
+                        <option value="web">Web</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Source</th>
+                        <th>Status</th>
+                        <th>Repository</th>
+                        <th>Description</th>
+                        <th>Submitted</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="tasks-table-body">
+                    <tr>
+                        <td colspan="7" class="text-center">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-3">
+            <small class="text-muted">Showing <span id="task-count">0</span> task(s)</small>
+        </div>
+    </div>
+
+    <!-- Task Detail Modal -->
+    <div class="modal fade" id="taskModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Task Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="task-details">
+                        <p>Loading...</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" id="retry-task-btn" class="btn btn-success" style="display: none;">Retry Task</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let refreshInterval = null;
+        let currentStatusFilter = '';
+        let currentSourceFilter = '';
+
+        function getStatusBadgeClass(status) {
+            const classes = {
+                'pending': 'bg-warning text-dark',
+                'running': 'bg-info text-white',
+                'completed': 'bg-success text-white',
+                'failed': 'bg-danger text-white'
+            };
+            return classes[status] || 'bg-secondary text-white';
+        }
+
+        function getSourceBadgeClass(source) {
+            return source === 'cli' ? 'bg-primary text-white' : 'bg-secondary text-white';
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function isValidHttpUrl(url) {
+            if (!url) return false;
+            try {
+                const parsed = new URL(url);
+                return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+            } catch {
+                return false;
+            }
+        }
+
+        function escapeAttribute(value) {
+            if (!value) return '';
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#x27;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            return date.toLocaleString();
+        }
+
+        function truncateText(text, maxLength) {
+            if (!text) return 'N/A';
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '...';
+        }
+
+        function renderTasks(tasks) {
+            const tbody = document.getElementById('tasks-table-body');
+            const taskCount = document.getElementById('task-count');
+            
+            taskCount.textContent = tasks.length;
+
+            if (tasks.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No tasks found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = tasks.map(task => {
+                const escapedId = escapeAttribute(task.id);
+                const statusBadge = `<span class="badge status-badge ${getStatusBadgeClass(task.status)}">${escapeHtml(task.status.toUpperCase())}</span>`;
+                const sourceBadge = `<span class="badge source-badge ${getSourceBadgeClass(task.source)}">${escapeHtml(task.source.toUpperCase())}</span>`;
+                const shortId = escapeHtml(task.id.substring(0, 8));
+                const description = escapeHtml(truncateText(task.description, 100));
+                const repositoryUrl = escapeHtml(truncateText(task.repository_url, 40));
+                
+                return `
+                    <tr class="task-row" data-task-id="${escapedId}">
+                        <td><code>${shortId}</code></td>
+                        <td>${sourceBadge}</td>
+                        <td>${statusBadge}</td>
+                        <td><small>${repositoryUrl}</small></td>
+                        <td class="description-cell">${description}</td>
+                        <td><small>${formatDate(task.submitted_at)}</small></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary view-task-btn" data-task-id="${escapedId}">
+                                View
+                            </button>
+                            ${task.status === 'failed' && task.source === 'web' ? `<button class="btn btn-sm btn-outline-success retry-task-btn ms-1" data-task-id="${escapedId}">
+                                Retry
+                            </button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            tbody.querySelectorAll('.task-row').forEach(row => {
+                row.addEventListener('click', (e) => {
+                    if (!e.target.classList.contains('view-task-btn')) {
+                        const taskId = row.getAttribute('data-task-id');
+                        if (taskId) {
+                            showTaskDetails(taskId);
+                        }
+                    }
+                });
+            });
+            
+            tbody.querySelectorAll('.view-task-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const taskId = btn.getAttribute('data-task-id');
+                    if (taskId) {
+                        showTaskDetails(taskId);
+                    }
+                });
+            });
+            
+            tbody.querySelectorAll('.retry-task-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const taskId = btn.getAttribute('data-task-id');
+                    if (taskId) {
+                        retryTask(taskId);
+                    }
+                });
+            });
+        }
+
+        async function loadTasks() {
+            try {
+                const params = new URLSearchParams();
+                if (currentStatusFilter) params.append('status', currentStatusFilter);
+                if (currentSourceFilter) params.append('source', currentSourceFilter);
+                params.append('limit', '50');
+
+                const response = await fetch(`/api/web/tasks?${params.toString()}`);
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        window.location.reload();
+                        return;
+                    }
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                renderTasks(data.tasks);
+            } catch (error) {
+                console.error('Error loading tasks:', error);
+                document.getElementById('tasks-table-body').innerHTML = 
+                    '<tr><td colspan="7" class="text-center text-danger">Error loading tasks</td></tr>';
+            }
+        }
+
+        async function showTaskDetails(taskId) {
+            const modal = new bootstrap.Modal(document.getElementById('taskModal'));
+            const detailsDiv = document.getElementById('task-details');
+            
+            detailsDiv.innerHTML = '<p>Loading...</p>';
+            modal.show();
+
+            try {
+                const escapedTaskId = encodeURIComponent(taskId);
+                const response = await fetch(`/api/web/tasks/${escapedTaskId}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const task = await response.json();
+                
+                let resultHtml = '';
+                if (task.result) {
+                    let prUrlHtml = '';
+                    if (task.result.pr_url) {
+                        const prUrl = String(task.result.pr_url);
+                        if (isValidHttpUrl(prUrl)) {
+                            const escapedPrUrl = escapeHtml(prUrl);
+                            const urlEncodedPrUrl = encodeURI(prUrl);
+                            prUrlHtml = `<li><strong>PR URL:</strong> <a href="${escapeAttribute(urlEncodedPrUrl)}" target="_blank" rel="noopener noreferrer">${escapedPrUrl}</a></li>`;
+                        } else {
+                            const escapedPrUrl = escapeHtml(prUrl);
+                            prUrlHtml = `<li><strong>PR URL:</strong> <span>${escapedPrUrl}</span> <small class="text-muted">(invalid URL)</small></li>`;
+                        }
+                    }
+                    const branchName = task.result.branch_name ? escapeHtml(task.result.branch_name) : '';
+                    const workDir = task.result.work_dir ? escapeHtml(task.result.work_dir) : '';
+                    
+                    resultHtml = `
+                        <h6>Result:</h6>
+                        <ul>
+                            ${prUrlHtml}
+                            ${branchName ? `<li><strong>Branch:</strong> <code>${branchName}</code></li>` : ''}
+                            ${workDir ? `<li><strong>Work Directory:</strong> <code>${workDir}</code></li>` : ''}
+                        </ul>
+                    `;
+                }
+
+                let errorHtml = '';
+                if (task.error) {
+                    errorHtml = `
+                        <h6 class="text-danger">Error:</h6>
+                        <pre class="bg-light p-3 border rounded">${escapeHtml(task.error)}</pre>
+                    `;
+                }
+
+                const escapedId = escapeHtml(task.id);
+                const escapedSource = escapeHtml(task.source.toUpperCase());
+                const escapedStatus = escapeHtml(task.status.toUpperCase());
+                const escapedRepoUrl = escapeHtml(task.repository_url);
+                const escapedDescription = escapeHtml(task.description);
+                const escapedTicketId = task.ticket_id ? escapeHtml(task.ticket_id) : '';
+                const escapedTicketSummary = task.ticket_summary ? escapeHtml(task.ticket_summary) : '';
+                const escapedTestCommand = task.test_command ? escapeHtml(task.test_command) : '';
+                const escapedBaseBranch = task.base_branch ? escapeHtml(task.base_branch) : '';
+
+                detailsDiv.innerHTML = `
+                    <dl class="row">
+                        <dt class="col-sm-3">Task ID:</dt>
+                        <dd class="col-sm-9"><code>${escapedId}</code></dd>
+                        
+                        <dt class="col-sm-3">Source:</dt>
+                        <dd class="col-sm-9"><span class="badge ${getSourceBadgeClass(task.source)}">${escapedSource}</span></dd>
+                        
+                        <dt class="col-sm-3">Status:</dt>
+                        <dd class="col-sm-9"><span class="badge ${getStatusBadgeClass(task.status)}">${escapedStatus}</span></dd>
+                        
+                        <dt class="col-sm-3">Repository:</dt>
+                        <dd class="col-sm-9"><code>${escapedRepoUrl}</code></dd>
+                        
+                        <dt class="col-sm-3">Description:</dt>
+                        <dd class="col-sm-9">${escapedDescription}</dd>
+                        
+                        ${escapedTicketId ? `<dt class="col-sm-3">Ticket ID:</dt><dd class="col-sm-9">${escapedTicketId}</dd>` : ''}
+                        ${escapedTicketSummary ? `<dt class="col-sm-3">Ticket Summary:</dt><dd class="col-sm-9">${escapedTicketSummary}</dd>` : ''}
+                        ${escapedTestCommand ? `<dt class="col-sm-3">Test Command:</dt><dd class="col-sm-9"><code>${escapedTestCommand}</code></dd>` : ''}
+                        ${escapedBaseBranch ? `<dt class="col-sm-3">Base Branch:</dt><dd class="col-sm-9"><code>${escapedBaseBranch}</code></dd>` : ''}
+                        
+                        <dt class="col-sm-3">Submitted:</dt>
+                        <dd class="col-sm-9">${formatDate(task.submitted_at)}</dd>
+                        
+                        ${task.started_at ? `<dt class="col-sm-3">Started:</dt><dd class="col-sm-9">${formatDate(task.started_at)}</dd>` : ''}
+                        ${task.completed_at ? `<dt class="col-sm-3">Completed:</dt><dd class="col-sm-9">${formatDate(task.completed_at)}</dd>` : ''}
+                    </dl>
+                    ${resultHtml}
+                    ${errorHtml}
+                `;
+                
+                const retryBtn = document.getElementById('retry-task-btn');
+                if (task.status === 'failed' && task.source === 'web') {
+                    retryBtn.style.display = 'inline-block';
+                    retryBtn.setAttribute('data-task-id', task.id);
+                } else {
+                    retryBtn.style.display = 'none';
+                    retryBtn.removeAttribute('data-task-id');
+                }
+            } catch (error) {
+                console.error('Error loading task details:', error);
+                detailsDiv.innerHTML = '<p class="text-danger">Error loading task details</p>';
+                document.getElementById('retry-task-btn').style.display = 'none';
+            }
+        }
+
+        async function retryTask(taskId) {
+            if (!confirm('Are you sure you want to retry this failed task?')) {
+                return;
+            }
+            
+            try {
+                const escapedTaskId = encodeURIComponent(taskId);
+                const response = await fetch(`/api/web/tasks/${escapedTaskId}/retry`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || `HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                alert(`Task retry queued successfully! New task ID: ${data.task_id}`);
+                
+                const modal = bootstrap.Modal.getInstance(document.getElementById('taskModal'));
+                if (modal) {
+                    modal.hide();
+                }
+                
+                loadTasks();
+            } catch (error) {
+                console.error('Error retrying task:', error);
+                alert(`Failed to retry task: ${error.message}`);
+            }
+        }
+
+        document.getElementById('status-filter').addEventListener('change', (e) => {
+            currentStatusFilter = e.target.value;
+            loadTasks();
+        });
+
+        document.getElementById('source-filter').addEventListener('change', (e) => {
+            currentSourceFilter = e.target.value;
+            loadTasks();
+        });
+
+        document.getElementById('retry-task-btn').addEventListener('click', () => {
+            const taskId = document.getElementById('retry-task-btn').getAttribute('data-task-id');
+            if (taskId) {
+                retryTask(taskId);
+            }
+        });
+
+        function startAutoRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+            refreshInterval = setInterval(() => {
+                loadTasks();
+            }, 5000);
+        }
+
+        function stopAutoRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+        }
+
+        document.getElementById('refresh-indicator').addEventListener('click', () => {
+            if (refreshInterval) {
+                stopAutoRefresh();
+                document.getElementById('refresh-indicator').textContent = 'Auto-refresh: OFF (click to enable)';
+            } else {
+                startAutoRefresh();
+                document.getElementById('refresh-indicator').textContent = 'Auto-refresh: ON';
+            }
+        });
+
+        loadTasks();
+        startAutoRefresh();
+    </script>
+</body>
+</html>
+

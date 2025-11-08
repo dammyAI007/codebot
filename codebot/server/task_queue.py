@@ -1,11 +1,11 @@
 """Task queue and status tracking for HTTP-submitted tasks."""
 
-import threading
 from datetime import datetime
 from queue import Empty, Queue
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from codebot.core.models import Task
+from codebot.server.task_store import global_task_store
 
 
 class TaskQueue:
@@ -19,8 +19,7 @@ class TaskQueue:
             max_size: Maximum number of tasks in queue
         """
         self.queue = Queue(maxsize=max_size)
-        self.tasks: Dict[str, Task] = {}
-        self.lock = threading.Lock()
+        self.task_store = global_task_store
     
     def enqueue(self, task: Task) -> None:
         """
@@ -29,9 +28,7 @@ class TaskQueue:
         Args:
             task: Task to enqueue
         """
-        with self.lock:
-            self.tasks[task.id] = task
-        
+        self.task_store.add_task(task)
         self.queue.put(task.id)
     
     def dequeue(self, timeout: float = 1.0) -> Optional[str]:
@@ -59,8 +56,7 @@ class TaskQueue:
         Returns:
             Task or None if not found
         """
-        with self.lock:
-            return self.tasks.get(task_id)
+        return self.task_store.get_task(task_id)
     
     def update_status(
         self,
@@ -82,18 +78,14 @@ class TaskQueue:
             result: Task result
             error: Error message if failed
         """
-        with self.lock:
-            task = self.tasks.get(task_id)
-            if task:
-                task.status = status
-                if started_at:
-                    task.started_at = started_at
-                if completed_at:
-                    task.completed_at = completed_at
-                if result:
-                    task.result = result
-                if error:
-                    task.error = error
+        self.task_store.update_task(
+            task_id=task_id,
+            status=status,
+            started_at=started_at,
+            completed_at=completed_at,
+            result=result,
+            error=error,
+        )
     
     def list_tasks(
         self,
@@ -110,16 +102,7 @@ class TaskQueue:
         Returns:
             List of tasks
         """
-        with self.lock:
-            tasks = list(self.tasks.values())
-        
-        if status_filter:
-            tasks = [t for t in tasks if t.status == status_filter]
-        
-        # Sort by submission time (newest first)
-        tasks.sort(key=lambda t: t.submitted_at, reverse=True)
-        
-        return tasks[:limit]
+        return self.task_store.list_tasks(status_filter=status_filter, limit=limit)
     
     def size(self) -> int:
         """Get current queue size."""
