@@ -18,3 +18,4 @@ codebot_workspace/
 
 # UV configuration (optional - remove if you want to commit corporate config)
 # .uv.toml
+*.pem

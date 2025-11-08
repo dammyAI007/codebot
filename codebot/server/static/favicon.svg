@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Robot Body (U-shaped, semi-circular) - scaled up -->
+  <path d="M 12 28 Q 12 50 32 50 Q 52 50 52 28 L 52 38 Q 52 46 46 46 L 18 46 Q 12 46 12 38 Z" fill="#2196F3"/>
+  <!-- Body outline/shadow -->
+  <path d="M 12 28 Q 12 50 32 50 Q 52 50 52 28 L 52 38 Q 52 46 46 46 L 18 46 Q 12 46 12 38 Z" fill="none" stroke="#1565C0" stroke-width="1.8" stroke-linejoin="round"/>
+  
+  <!-- Left arm/side panel (C-shaped) - extended further -->
+  <path d="M 8 34 Q 4 34 4 40 Q 4 46 8 46" fill="none" stroke="#1565C0" stroke-width="3.5" stroke-linecap="round"/>
+  
+  <!-- Right arm/side panel (C-shaped) - extended further -->
+  <path d="M 56 34 Q 60 34 60 40 Q 60 46 56 46" fill="none" stroke="#1565C0" stroke-width="3.5" stroke-linecap="round"/>
+  
+  <!-- Robot Head (rounded rectangle) - scaled up -->
+  <rect x="16" y="4" width="32" height="24" rx="5" fill="#2196F3"/>
+  <!-- Head outline/shadow -->
+  <rect x="16" y="4" width="32" height="24" rx="5" fill="none" stroke="#1565C0" stroke-width="1.8"/>
+  
+  <!-- Left eye (circular, darker blue) - scaled up -->
+  <circle cx="24" cy="14" r="3.5" fill="#1565C0"/>
+  
+  <!-- Right eye (circular, darker blue) - scaled up -->
+  <circle cx="40" cy="14" r="3.5" fill="#1565C0"/>
+  
+  <!-- Antenna (single, center top) - scaled up -->
+  <line x1="32" y1="4" x2="32" y2="0" stroke="#2196F3" stroke-width="3" stroke-linecap="round"/>
+  <!-- Antenna cap (darker blue circle) - scaled up -->
+  <circle cx="32" cy="0" r="2.5" fill="#1565C0"/>
+  
+  <!-- Code symbol </> on body (white) - scaled up -->
+  <text x="32" y="44" font-family="monospace" font-size="14" fill="#FFFFFF" text-anchor="middle" font-weight="bold">&lt;/&gt;</text>
+</svg>
