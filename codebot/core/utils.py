@@ -323,3 +323,29 @@ def find_workspace_by_uuid(base_dir: Path, uuid: str) -> Optional[Path]:
             return item
     
     return None
+
+
+def cleanup_workspace(workspace_path: Path) -> bool:
+    """
+    Safely delete a workspace directory and all its contents.
+    
+    Args:
+        workspace_path: Path to the workspace directory to delete
+        
+    Returns:
+        True if deletion was successful, False otherwise
+    """
+    import shutil
+    
+    if not workspace_path.exists():
+        return False
+    
+    if not workspace_path.is_dir():
+        return False
+    
+    try:
+        shutil.rmtree(workspace_path)
+        return True
+    except Exception as e:
+        print(f"Warning: Failed to delete workspace {workspace_path}: {e}")
+        return False

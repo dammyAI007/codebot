@@ -253,17 +253,31 @@ class GitHubAppAuth:
     def bot_user_id(self) -> Optional[str]:
         """
         Get the GitHub App bot user ID (cached property).
-        
+
         Returns:
             Bot user ID as string, or None if retrieval fails
         """
         if self._bot_user_id:
             return self._bot_user_id
-        
+
         try:
             return self.get_bot_user_id()
         except Exception as e:
             # Log warning but don't fail - allow fallback to app_id
             print(f"Warning: Could not retrieve bot user ID: {e}")
             return None
+
+    def get_bot_login(self) -> str:
+        """
+        Get the GitHub App bot user login name.
+
+        The bot login follows the format: {app_name}[bot]
+        For codebot-007, this would be "codebot-007[bot]"
+
+        Returns:
+            Bot login name as string
+        """
+        # The bot login is based on the app name, which is hardcoded as "codebot-007"
+        # This matches the app registration name
+        return "codebot-007[bot]"
 

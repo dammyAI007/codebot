@@ -196,8 +196,11 @@ def serve(
         )
         task_processor.start()
     
+    # Get bot login for comment detection
+    bot_login = github_app_auth.get_bot_login()
+    
     # Create Flask app
-    app = create_app(task_queue=task_queue)
+    app = create_app(task_queue=task_queue, bot_login=bot_login, workspace_base_dir=work_base_dir)
     
     # Start Flask server (blocking)
     try:

@@ -9,12 +9,18 @@ from codebot.server.task_queue import TaskQueue
 from codebot.server.webhook import review_queue
 
 
-def create_app(task_queue: Optional[TaskQueue] = None) -> Flask:
+def create_app(
+    task_queue: Optional[TaskQueue] = None,
+    bot_login: Optional[str] = None,
+    workspace_base_dir: Optional[Path] = None,
+) -> Flask:
     """
     Create and configure Flask application.
     
     Args:
         task_queue: Optional task queue for API endpoints
+        bot_login: Optional bot login name for comment detection (e.g., "codebot-007[bot]")
+        workspace_base_dir: Optional base directory for workspaces (for cleanup)
         
     Returns:
         Configured Flask app
@@ -28,6 +34,14 @@ def create_app(task_queue: Optional[TaskQueue] = None) -> Flask:
         template_folder=str(template_dir),
         static_folder=str(static_dir)
     )
+    
+    # Store bot login in app config for webhook handlers
+    if bot_login:
+        app.config['CODEBOT_BOT_LOGIN'] = bot_login
+    
+    # Store workspace base directory for cleanup handlers
+    if workspace_base_dir:
+        app.config['CODEBOT_WORKSPACE_BASE_DIR'] = str(workspace_base_dir)
     
     # Register webhook handlers
     from codebot.server import webhook
