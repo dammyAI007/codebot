@@ -1,8 +1,8 @@
 """Data models for codebot."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 
 @dataclass
@@ -37,3 +37,4 @@ class Task:
     completed_at: Optional[datetime] = None
     result: Optional[dict] = None
     error: Optional[str] = None
+    subtasks: List["Task"] = field(default_factory=list)

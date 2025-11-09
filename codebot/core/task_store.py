@@ -2,17 +2,57 @@
 
 import threading
 from datetime import datetime
-from typing import Dict, List, Optional
+from pathlib import Path
+from typing import List, Optional
 
 from codebot.core.models import Task
+from codebot.core.storage import TaskStorage
+from codebot.core.storage_sqlite import SQLiteTaskStorage
+
+
+def _get_data_dir(workspace_base_dir: Optional[Path] = None) -> Path:
+    """
+    Determine the data directory path.
+    
+    Args:
+        workspace_base_dir: Optional workspace base directory.
+                           If provided, data dir will be sibling to it.
+                           Otherwise, defaults to ./codebot_data
+        
+    Returns:
+        Path to data directory
+    """
+    if workspace_base_dir:
+        return workspace_base_dir.parent / "codebot_data"
+    return Path.cwd() / "codebot_data"
+
+
+def _create_storage(workspace_base_dir: Optional[Path] = None) -> TaskStorage:
+    """
+    Create storage instance.
+    
+    Args:
+        workspace_base_dir: Optional workspace base directory
+        
+    Returns:
+        TaskStorage instance
+    """
+    data_dir = _get_data_dir(workspace_base_dir)
+    db_path = data_dir / "tasks.db"
+    return SQLiteTaskStorage(db_path)
 
 
 class TaskStore:
-    """Thread-safe centralized task storage."""
+    """Thread-safe centralized task storage wrapper."""
     
-    def __init__(self):
-        """Initialize task store."""
-        self.tasks: Dict[str, Task] = {}
+    def __init__(self, storage: Optional[TaskStorage] = None):
+        """
+        Initialize task store.
+        
+        Args:
+            storage: Optional storage backend. If not provided, creates SQLite storage.
+        """
+        self.storage = storage or _create_storage()
         self.lock = threading.Lock()
     
     def add_task(self, task: Task) -> None:
@@ -23,7 +63,7 @@ class TaskStore:
             task: Task to add
         """
         with self.lock:
-            self.tasks[task.id] = task
+            self.storage.add_task(task)
     
     def get_task(self, task_id: str) -> Optional[Task]:
         """
@@ -36,7 +76,7 @@ class TaskStore:
             Task or None if not found
         """
         with self.lock:
-            return self.tasks.get(task_id)
+            return self.storage.get_task(task_id)
     
     def update_task(
         self,
@@ -59,18 +99,14 @@ class TaskStore:
             error: Error message if failed
         """
         with self.lock:
-            task = self.tasks.get(task_id)
-            if task:
-                if status is not None:
-                    task.status = status
-                if started_at is not None:
-                    task.started_at = started_at
-                if completed_at is not None:
-                    task.completed_at = completed_at
-                if result is not None:
-                    task.result = result
-                if error is not None:
-                    task.error = error
+            self.storage.update_task(
+                task_id=task_id,
+                status=status,
+                started_at=started_at,
+                completed_at=completed_at,
+                result=result,
+                error=error,
+            )
     
     def list_tasks(
         self,
@@ -83,24 +119,18 @@ class TaskStore:
         
         Args:
             status_filter: Filter by status
-            source_filter: Filter by source (cli/web)
+            source_filter: Filter by source (cli/web/review)
             limit: Maximum number of tasks to return
             
         Returns:
             List of tasks
         """
         with self.lock:
-            tasks = list(self.tasks.values())
-        
-        if status_filter:
-            tasks = [t for t in tasks if t.status == status_filter]
-        
-        if source_filter:
-            tasks = [t for t in tasks if t.source == source_filter]
-        
-        tasks.sort(key=lambda t: t.submitted_at, reverse=True)
-        
-        return tasks[:limit]
+            return self.storage.list_tasks(
+                status_filter=status_filter,
+                source_filter=source_filter,
+                limit=limit
+            )
     
     def get_all_tasks(self) -> List[Task]:
         """
@@ -110,12 +140,43 @@ class TaskStore:
             List of all tasks
         """
         with self.lock:
-            return list(self.tasks.values())
+            return self.storage.get_all_tasks()
+    
+    def find_task_by_branch_uuid(self, uuid: str) -> Optional[Task]:
+        """
+        Find a task by branch UUID.
+        
+        Args:
+            uuid: UUID extracted from branch name
+            
+        Returns:
+            Task or None if not found
+        """
+        with self.lock:
+            return self.storage.find_task_by_branch_uuid(uuid)
+    
+    def find_task_by_pr_url(self, pr_url: str) -> Optional[Task]:
+        """
+        Find a task by PR URL.
+        
+        Args:
+            pr_url: Pull request URL
+            
+        Returns:
+            Task or None if not found
+        """
+        with self.lock:
+            return self.storage.find_task_by_pr_url(pr_url)
     
     def size(self) -> int:
         """Get total number of tasks."""
         with self.lock:
-            return len(self.tasks)
+            return len(self.storage.get_all_tasks())
+    
+    def close(self) -> None:
+        """Close storage connection."""
+        with self.lock:
+            self.storage.close()
 
 
 global_task_store = TaskStore()

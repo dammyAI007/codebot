@@ -124,7 +124,12 @@
         }
 
         function getSourceBadgeClass(source) {
-            return source === 'cli' ? 'bg-primary text-white' : 'bg-secondary text-white';
+            const classes = {
+                'cli': 'bg-primary text-white',
+                'web': 'bg-info text-white',
+                'review': 'bg-success text-white'
+            };
+            return classes[source] || 'bg-secondary text-white';
         }
 
         function escapeHtml(text) {
@@ -157,7 +162,13 @@
         function formatDate(dateString) {
             if (!dateString) return 'N/A';
             const date = new Date(dateString);
-            return date.toLocaleString();
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const seconds = String(date.getSeconds()).padStart(2, '0');
+            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
         }
 
         function truncateText(text, maxLength) {
@@ -184,10 +195,12 @@
                 const shortId = escapeHtml(task.id.substring(0, 8));
                 const description = escapeHtml(truncateText(task.description, 100));
                 const repositoryUrl = escapeHtml(truncateText(task.repository_url, 40));
+                const subtaskCount = task.subtasks && task.subtasks.length > 0 ? task.subtasks.length : 0;
+                const subtaskIndicator = subtaskCount > 0 ? `<small class="text-muted">(${subtaskCount} subtask${subtaskCount !== 1 ? 's' : ''})</small>` : '';
                 
                 return `
                     <tr class="task-row" data-task-id="${escapedId}">
-                        <td><code>${shortId}</code></td>
+                        <td><code>${shortId}</code>${subtaskIndicator ? `<br>${subtaskIndicator}` : ''}</td>
                         <td>${sourceBadge}</td>
                         <td>${statusBadge}</td>
                         <td><small>${repositoryUrl}</small></td>
@@ -323,6 +336,65 @@
                 const escapedTestCommand = task.test_command ? escapeHtml(task.test_command) : '';
                 const escapedBaseBranch = task.base_branch ? escapeHtml(task.base_branch) : '';
 
+                let subtasksHtml = '';
+                if (task.subtasks && task.subtasks.length > 0) {
+                    subtasksHtml = `
+                        <h6 class="mt-3">Subtasks (${task.subtasks.length}):</h6>
+                        <div class="list-group">
+                            ${task.subtasks.map(subtask => {
+                                const escapedSubtaskId = escapeAttribute(subtask.id);
+                                const escapedSubtaskSource = escapeHtml(subtask.source.toUpperCase());
+                                const escapedSubtaskStatus = escapeHtml(subtask.status.toUpperCase());
+                                const escapedSubtaskDesc = escapeHtml(truncateText(subtask.description, 80));
+                                
+                                let viewLink = '';
+                                if (subtask.source === 'review' && subtask.result) {
+                                    const prUrl = subtask.result.pr_url;
+                                    const commentId = subtask.result.comment_id;
+                                    const commentType = subtask.result.comment_type || 'review_comment';
+                                    
+                                    if (prUrl && commentId) {
+                                        let commentUrl = prUrl;
+                                        if (commentType === 'issue_comment') {
+                                            commentUrl = `${prUrl}#issuecomment-${commentId}`;
+                                        } else if (commentType === 'review_comment') {
+                                            commentUrl = `${prUrl}#discussion_r${commentId}`;
+                                        } else if (commentType === 'review') {
+                                            commentUrl = `${prUrl}#pullrequestreview-${commentId}`;
+                                        }
+                                        
+                                        const escapedCommentUrl = escapeAttribute(commentUrl);
+                                        viewLink = `<a href="${escapedCommentUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary">View Comment</a>`;
+                                    }
+                                }
+                                
+                                if (!viewLink) {
+                                    viewLink = `<button class="btn btn-sm btn-outline-primary view-subtask-btn" data-task-id="${escapedSubtaskId}">View</button>`;
+                                }
+                                
+                                const submittedAt = subtask.submitted_at ? formatDate(subtask.submitted_at) : 'N/A';
+                                
+                                return `
+                                    <div class="list-group-item">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div class="flex-grow-1">
+                                                <h6 class="mb-1">
+                                                    <code>${escapeHtml(subtask.id.substring(0, 8))}</code>
+                                                    <span class="badge ${getSourceBadgeClass(subtask.source)} ms-2">${escapedSubtaskSource}</span>
+                                                    <span class="badge ${getStatusBadgeClass(subtask.status)} ms-1">${escapedSubtaskStatus}</span>
+                                                </h6>
+                                                <p class="mb-1 small">${escapedSubtaskDesc}</p>
+                                                <small class="text-muted">Submitted: ${submittedAt}</small>
+                                            </div>
+                                            ${viewLink}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    `;
+                }
+                
                 detailsDiv.innerHTML = `
                     <dl class="row">
                         <dt class="col-sm-3">Task ID:</dt>
@@ -353,7 +425,19 @@
                     </dl>
                     ${resultHtml}
                     ${errorHtml}
+                    ${subtasksHtml}
                 `;
+                
+                detailsDiv.querySelectorAll('.view-subtask-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const subtaskId = btn.getAttribute('data-task-id');
+                        if (subtaskId) {
+                            modal.hide();
+                            setTimeout(() => showTaskDetails(subtaskId), 300);
+                        }
+                    });
+                });
                 
                 const retryBtn = document.getElementById('retry-task-btn');
                 if (task.status === 'failed' && task.source === 'web') {

@@ -45,24 +45,27 @@ def create_web_ui_blueprint() -> Blueprint:
             limit=limit
         )
         
+        tasks = [t for t in tasks if t.source != "review"]
+        
+        def serialize_task(task: Task) -> dict:
+            return {
+                "id": task.id,
+                "source": task.source,
+                "status": task.status,
+                "repository_url": task.prompt.repository_url,
+                "description": task.prompt.description,
+                "ticket_id": task.prompt.ticket_id,
+                "ticket_summary": task.prompt.ticket_summary,
+                "submitted_at": task.submitted_at.isoformat() if task.submitted_at else None,
+                "started_at": task.started_at.isoformat() if task.started_at else None,
+                "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+                "result": task.result,
+                "error": task.error,
+                "subtasks": [serialize_task(st) for st in task.subtasks] if task.subtasks else [],
+            }
+        
         return jsonify({
-            "tasks": [
-                {
-                    "id": task.id,
-                    "source": task.source,
-                    "status": task.status,
-                    "repository_url": task.prompt.repository_url,
-                    "description": task.prompt.description,
-                    "ticket_id": task.prompt.ticket_id,
-                    "ticket_summary": task.prompt.ticket_summary,
-                    "submitted_at": task.submitted_at.isoformat() if task.submitted_at else None,
-                    "started_at": task.started_at.isoformat() if task.started_at else None,
-                    "completed_at": task.completed_at.isoformat() if task.completed_at else None,
-                    "result": task.result,
-                    "error": task.error,
-                }
-                for task in tasks
-            ],
+            "tasks": [serialize_task(task) for task in tasks],
             "count": len(tasks)
         }), 200
     
@@ -78,22 +81,26 @@ def create_web_ui_blueprint() -> Blueprint:
                 "message": f"Task {task_id} not found"
             }), 404
         
-        return jsonify({
-            "id": task.id,
-            "source": task.source,
-            "status": task.status,
-            "repository_url": task.prompt.repository_url,
-            "description": task.prompt.description,
-            "ticket_id": task.prompt.ticket_id,
-            "ticket_summary": task.prompt.ticket_summary,
-            "test_command": task.prompt.test_command,
-            "base_branch": task.prompt.base_branch,
-            "submitted_at": task.submitted_at.isoformat() if task.submitted_at else None,
-            "started_at": task.started_at.isoformat() if task.started_at else None,
-            "completed_at": task.completed_at.isoformat() if task.completed_at else None,
-            "result": task.result,
-            "error": task.error,
-        }), 200
+        def serialize_task(task: Task) -> dict:
+            return {
+                "id": task.id,
+                "source": task.source,
+                "status": task.status,
+                "repository_url": task.prompt.repository_url,
+                "description": task.prompt.description,
+                "ticket_id": task.prompt.ticket_id,
+                "ticket_summary": task.prompt.ticket_summary,
+                "test_command": task.prompt.test_command,
+                "base_branch": task.prompt.base_branch,
+                "submitted_at": task.submitted_at.isoformat() if task.submitted_at else None,
+                "started_at": task.started_at.isoformat() if task.started_at else None,
+                "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+                "result": task.result,
+                "error": task.error,
+                "subtasks": [serialize_task(st) for st in task.subtasks] if task.subtasks else [],
+            }
+        
+        return jsonify(serialize_task(task)), 200
     
     @web_ui.route("/api/web/tasks/<task_id>/retry", methods=["POST"])
     @require_basic_auth

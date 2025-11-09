@@ -1,6 +1,8 @@
 """Process PR review comments from the queue."""
 
 import time
+import uuid
+from datetime import datetime
 from pathlib import Path
 from queue import Empty, Queue
 from typing import Optional
@@ -9,7 +11,8 @@ from codebot.core.environment import EnvironmentManager
 from codebot.core.github_app import GitHubAppAuth
 from codebot.core.git_ops import GitOps
 from codebot.core.github_pr import GitHubPR
-from codebot.core.models import TaskPrompt
+from codebot.core.models import Task, TaskPrompt
+from codebot.core.task_store import global_task_store
 from codebot.server.review_runner import ReviewRunner
 from codebot.core.utils import extract_uuid_from_branch, find_workspace_by_uuid
 
@@ -105,6 +108,29 @@ class ReviewProcessor:
         print(f"Branch: {branch_name}")
         print(f"Comment: {comment_body[:100]}...")
         
+        # Find parent task
+        parent_task = None
+        uuid_from_branch = extract_uuid_from_branch(branch_name)
+        
+        if uuid_from_branch:
+            print(f"Looking for parent task with UUID: {uuid_from_branch}")
+            parent_task = global_task_store.find_task_by_branch_uuid(uuid_from_branch)
+        
+        if not parent_task:
+            try:
+                pr_details = self.github_pr.get_pr_details(repo_owner, repo_name, pr_number)
+                pr_url = pr_details.get("html_url")
+                if pr_url:
+                    print(f"Looking for parent task with PR URL: {pr_url}")
+                    parent_task = global_task_store.find_task_by_pr_url(pr_url)
+            except Exception as e:
+                print(f"Warning: Could not fetch PR details to find parent task: {e}")
+        
+        if parent_task:
+            print(f"Found parent task: {parent_task.id}")
+        else:
+            print("Warning: Could not find parent task. Review task will be created standalone.")
+        
         # Derive workspace from branch name
         workspace_path = self._get_or_create_workspace(
             branch_name,
@@ -135,9 +161,26 @@ class ReviewProcessor:
                 pr_context["comment_thread"] = thread
                 print(f"Found {len(thread)} comments in thread")
         
+        # Check if this is a reply to a clarification request
+        is_clarification_response = False
+        if pr_context.get('comment_thread') and len(pr_context['comment_thread']) > 1:
+            # Check if the bot's previous comment was asking for clarification
+            previous_comments = pr_context['comment_thread'][:-1]
+            for prev_comment in reversed(previous_comments):
+                prev_body = prev_comment.get('body', '').lower()
+                prev_author = prev_comment.get('user', {}).get('login', '').lower()
+                # Check if bot asked for clarification
+                if 'codebot' in prev_author or 'bot' in prev_author:
+                    if 'clarify' in prev_body or 'clarification' in prev_body:
+                        is_clarification_response = True
+                        break
+                # If we hit a non-bot comment, stop looking
+                if 'codebot' not in prev_author and 'bot' not in prev_author:
+                    break
+        
         # Use Claude to classify comment
         print("\nClassifying comment with Claude...")
-        classification = self._classify_comment_with_claude(comment_body, pr_context)
+        classification = self._classify_comment_with_claude(comment_body, pr_context, is_clarification_response)
         
         classification_type = classification["type"]
         
@@ -269,6 +312,41 @@ class ReviewProcessor:
                 reply_body = claude_response
             else:
                 reply_body = "Thank you for the question. I've reviewed this."
+        
+        # Create review task and link to parent if found
+        review_task_id = str(uuid.uuid4())
+        review_task = Task(
+            id=review_task_id,
+            prompt=TaskPrompt(
+                repository_url=repo_url,
+                description=f"Review comment on PR #{pr_number}: {comment_body[:100]}",
+            ),
+            status="completed",
+            submitted_at=datetime.utcnow(),
+            source="review",
+            completed_at=datetime.utcnow(),
+            result={
+                "pr_number": pr_number,
+                "pr_url": f"https://github.com/{repo_owner}/{repo_name}/pull/{pr_number}",
+                "comment_id": comment_id,
+                "comment_type": comment_data.get("type", "review_comment"),
+                "branch_name": branch_name,
+            },
+        )
+        
+        global_task_store.add_task(review_task)
+        
+        if parent_task:
+            parent_task = global_task_store.get_task(parent_task.id)
+            if parent_task:
+                parent_subtasks = [st.id for st in parent_task.subtasks] if parent_task.subtasks else []
+                if review_task_id not in parent_subtasks:
+                    parent_subtasks.append(review_task_id)
+                    global_task_store.storage.update_task(
+                        parent_task.id,
+                        subtasks=parent_subtasks,
+                    )
+                    print(f"Added review task {review_task_id} as subtask of {parent_task.id}")
         
         # Post reply to the comment
         self._post_reply(
@@ -547,7 +625,7 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
                 "files_changed": "",
             }
     
-    def _classify_comment_with_claude(self, comment_body: str, pr_context: dict) -> dict:
+    def _classify_comment_with_claude(self, comment_body: str, pr_context: dict, is_clarification_response: bool = False) -> dict:
         """
         Use Claude to classify a review comment as query, change request, or ambiguous.
         
@@ -598,6 +676,11 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
         context_parts.append("Current Review Comment:")
         context_parts.append(comment_body)
         context_parts.append("")
+        
+        if is_clarification_response:
+            context_parts.append("NOTE: This comment is a response to a clarification request. Classify it based on the comments before and after the clarification request in the thread.")
+            context_parts.append("")
+        
         context_parts.append("Classify this comment into ONE of these categories:")
         
         classification_prompt = "\n".join(context_parts) + """
@@ -615,6 +698,7 @@ Classify this comment into ONE of these categories:
 
 4. NITPICK - The reviewer is making a minor suggestion or pointing out a small issue (not a blocking change request)
    Examples: "Maybe use a more descriptive variable name?", "Consider adding a comment here", "Minor: could use const instead"
+   IMPORTANT: If the reviewer explicitly states "this is a nitpick", "nitpick", "nit:", or similar, classify as NITPICK
 
 5. AMBIGUOUS - The intent is unclear and needs clarification from the reviewer
    Examples: "This could be better", "Not sure about this", "Hmm..."
@@ -668,7 +752,7 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
         workspace_path: Path,
     ):
         """
-        Update PR description using Claude to generate a cohesive summary from the diff.
+        Update PR description by comparing current description with all commits in the PR.
         """
         try:
             import subprocess
@@ -678,6 +762,7 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
             pr_title = pr_details.get("title", "")
             original_body = pr_details.get("body", "")
             
+            # Extract task description from current PR
             task_description = ""
             if "## 📋 Task Description" in original_body:
                 start = original_body.find("## 📋 Task Description")
@@ -686,62 +771,151 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
                     end = original_body.find("## 📁 Files Changed", start)
                 if end != -1:
                     task_section = original_body[start:end].strip()
-                    task_description = task_section.replace("## 📋 Task Description\n\n", "").strip()
+                    task_description = task_section.replace("## 📋 Task Description\n\n", "").replace("## 📋 Task Description", "").strip()
             
+            # Extract current changes made section
+            current_changes_made = ""
+            if "## 🔨 Changes Made" in original_body:
+                start = original_body.find("## 🔨 Changes Made")
+                end = original_body.find("## 📁 Files Changed", start)
+                if end == -1:
+                    end = len(original_body)
+                changes_section = original_body[start:end].strip()
+                current_changes_made = changes_section.replace("## 🔨 Changes Made\n\n", "").replace("## 🔨 Changes Made", "").strip()
+            
+            # Get base branch (usually main or master)
             result = subprocess.run(
-                ["git", "diff", "--name-only", "origin/main...HEAD"],
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=workspace_path,
+                capture_output=True,
+                text=True,
+            )
+            current_branch = result.stdout.strip() if result.returncode == 0 else "HEAD"
+            
+            # Try to find base branch
+            base_branch = None
+            for branch in ["main", "master", "develop"]:
+                result = subprocess.run(
+                    ["git", "rev-parse", f"origin/{branch}"],
+                    cwd=workspace_path,
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode == 0:
+                    base_branch = branch
+                    break
+            
+            if not base_branch:
+                print("Warning: Could not determine base branch, using origin/main")
+                base_branch = "main"
+            
+            # Get all commits in the PR
+            result = subprocess.run(
+                ["git", "log", f"origin/{base_branch}..HEAD", "--pretty=format:%H|%s|%b", "--reverse"],
+                cwd=workspace_path,
+                capture_output=True,
+                text=True,
+            )
+            
+            commits_info = []
+            if result.returncode == 0 and result.stdout.strip():
+                for line in result.stdout.strip().split("\n"):
+                    parts = line.split("|", 2)
+                    if len(parts) >= 2:
+                        commit_hash = parts[0]
+                        commit_subject = parts[1]
+                        commit_body = parts[2] if len(parts) > 2 else ""
+                        commits_info.append({
+                            "hash": commit_hash[:7],
+                            "subject": commit_subject,
+                            "body": commit_body.strip()
+                        })
+            
+            # Get files changed
+            result = subprocess.run(
+                ["git", "diff", "--name-only", f"origin/{base_branch}...HEAD"],
                 cwd=workspace_path,
                 capture_output=True,
                 text=True,
             )
             files_changed = [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
             
+            # Get full diff
             result = subprocess.run(
-                ["git", "diff", "origin/main...HEAD"],
+                ["git", "diff", f"origin/{base_branch}...HEAD"],
                 cwd=workspace_path,
                 capture_output=True,
                 text=True,
             )
             full_diff = result.stdout.strip()
             
-            if len(full_diff) > 8000:
-                full_diff = full_diff[:8000] + "\n\n... (diff truncated for brevity)"
+            if len(full_diff) > 12000:
+                full_diff = full_diff[:12000] + "\n\n... (diff truncated for brevity)"
+            
+            # Format commits for prompt
+            commits_text = ""
+            if commits_info:
+                commits_text = "\n".join([
+                    f"- {c['hash']}: {c['subject']}" + (f"\n  {c['body']}" if c['body'] else "")
+                    for c in commits_info
+                ])
             
             files_section = ""
-            if len(files_changed) <= 5:
+            if files_changed:
                 files_section = "\n\n## 📁 Files Changed\n\n"
                 for file in files_changed:
-                    files_section += f"- `{file}`\n"
+                    files_section += f"M    {file}\n"
             
-            prompt = f"""Analyze this PR and generate a concise, cohesive description of ALL changes made.
+            prompt = f"""Analyze this PR and update the "Changes Made" section based on ALL commits in the PR.
 
-Original Task:
-{task_description}
+Current PR Description "Changes Made" Section:
+{current_changes_made if current_changes_made else "(empty or not found)"}
 
-Files Changed: {', '.join(files_changed)}
+All Commits in PR (from {base_branch} to HEAD):
+{commits_text if commits_text else "No commits found"}
+
+Files Changed:
+{', '.join(files_changed) if files_changed else "None"}
 
 Full Diff:
-{full_diff}
+{full_diff[:8000] if len(full_diff) > 8000 else full_diff}
 
-Generate a PR description in this EXACT format (respond ONLY with the markdown, no preamble):
+Task Description:
+{task_description if task_description else "Not specified"}
+
+Generate an updated PR description in this EXACT format (respond ONLY with the markdown, no preamble):
 
 ## 📋 Task Description
 
-{task_description}
+{task_description if task_description else "Not specified"}
 
 ## 🔨 Changes Made
 
-[Write a cohesive summary of what was implemented. Describe the changes as ONE unified implementation, not as separate commits. Focus on WHAT was built and HOW it works. Be concise but complete.]{files_section}
+[Write a cohesive summary of ALL changes made across all commits. Use bullet points for clarity. Include:
+- What was implemented/changed
+- Key technical details
+- Test results if available
+- Any important notes]
+
+Format example:
+- Modified clearDisplay() function to set display.value to '0' instead of empty string
+- Updated corresponding tests to expect '0' after clearing display
+- All tests passing (38/38)
+- Matches behavior of traditional physical calculators{files_section}
 
 ---
 *This PR was automatically generated by [codebot](https://github.com/ajibigad/codebot) 🤖*
 
 **CRITICAL REQUIREMENTS:**
-- Write the "Changes Made" section as a unified description of the complete implementation. Do NOT list individual commits or updates. Describe the feature as it exists now.
-- **DO NOT include any of the following in your response:**
-  * "🤖 Generated with Claude Code" or any variation of this text
-  * "Co-Authored-By:" trailers or any author attribution lines
-  * Any text that mentions Claude Code or Claude as an author"""
+- Compare the current "Changes Made" section with ALL commits in the PR
+- If the current description accurately reflects all commits, keep it mostly the same (minor improvements OK)
+- If commits show new changes not in the description, update it to include ALL changes
+- Use bullet points for clarity (as shown in example)
+- Be concise but complete
+- **DO NOT include any of the following:**
+  * "🤖 Generated with Claude Code" or any variation
+  * "Co-Authored-By:" trailers
+  * Any text mentioning Claude Code or Claude as an author"""
 
             result = subprocess.run(
                 ["claude", "-p", prompt, "--output-format", "text"],
