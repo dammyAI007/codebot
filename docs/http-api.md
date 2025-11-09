@@ -36,8 +36,12 @@ Options:
 - `--port` - Server port (default: 5000)
 - `--workers` - Number of task processor threads (default: 1)
 - `--work-dir` - Base directory for workspaces
-- `--github-token` - GitHub token (or use `GITHUB_TOKEN` env var)
 - `--debug` - Enable debug mode with auto-reload
+
+**Note**: GitHub App configuration is required via environment variables:
+- `GITHUB_APP_ID` - GitHub App ID
+- `GITHUB_APP_PRIVATE_KEY_PATH` - Path to private key file
+- `GITHUB_APP_INSTALLATION_ID` - Installation ID
 
 The server will display:
 

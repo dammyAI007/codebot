@@ -166,18 +166,52 @@ def is_github_url(url: str) -> bool:
         return False
 
 
-def get_git_env() -> Dict[str, str]:
+def get_codebot_git_author_info(bot_user_id: str) -> Dict[str, str]:
+    """
+    Get git author and committer information for codebot.
+    
+    Args:
+        bot_user_id: GitHub App bot user ID (not app ID)
+        
+    Returns:
+        Dictionary with author name, author email, committer name, and committer email
+    """
+    author_name = "codebot-007[bot]"
+    author_email = f"{bot_user_id}+codebot-007[bot]@users.noreply.github.com"
+    
+    return {
+        "author_name": author_name,
+        "author_email": author_email,
+        "committer_name": author_name,
+        "committer_email": author_email,
+    }
+
+
+def get_git_env(bot_user_id: Optional[str] = None) -> Dict[str, str]:
     """
     Get git environment variables for non-interactive operation.
+    
+    Args:
+        bot_user_id: Optional GitHub App bot user ID to set git author/committer information
     
     Returns:
         Dictionary of environment variables for git operations
     """
-    return {
+    env = {
         **os.environ,
         "GIT_TERMINAL_PROMPT": "0",  # Disable terminal prompts
         "GIT_ASKPASS": "echo",       # Use echo as askpass (returns empty)
     }
+    
+    # If bot_user_id is provided, set git author/committer information
+    if bot_user_id:
+        author_info = get_codebot_git_author_info(bot_user_id)
+        env["GIT_AUTHOR_NAME"] = author_info["author_name"]
+        env["GIT_AUTHOR_EMAIL"] = author_info["author_email"]
+        env["GIT_COMMITTER_NAME"] = author_info["committer_name"]
+        env["GIT_COMMITTER_EMAIL"] = author_info["committer_email"]
+    
+    return env
 
 
 def generate_short_uuid() -> str:

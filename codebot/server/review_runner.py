@@ -5,20 +5,22 @@ from pathlib import Path
 from typing import Optional
 
 from codebot.claude.runner import ClaudeRunner
+from codebot.core.github_app import GitHubAppAuth
 
 
 class ReviewRunner:
     """Runner for Claude Code CLI specialized for PR review comments."""
     
-    def __init__(self, work_dir: Path):
+    def __init__(self, work_dir: Path, github_app_auth: Optional[GitHubAppAuth] = None):
         """
         Initialize the review runner.
         
         Args:
             work_dir: Working directory where Claude Code should run
+            github_app_auth: Optional GitHub App authentication instance
         """
         self.work_dir = work_dir
-        self.claude_runner = ClaudeRunner(work_dir)
+        self.claude_runner = ClaudeRunner(work_dir, github_app_auth=github_app_auth)
     
     def handle_review_comment(
         self,
@@ -166,7 +168,12 @@ class ReviewRunner:
             prompt_parts.append("4. Run all tests to ensure nothing is broken")
             prompt_parts.append("5. Commit the changes with a clear message")
             prompt_parts.append("")
-            prompt_parts.append("Your commit message should reference that this addresses a review comment.")
+            prompt_parts.append("**CRITICAL COMMIT MESSAGE REQUIREMENTS:**")
+            prompt_parts.append("- Your commit message should reference that this addresses a review comment")
+            prompt_parts.append("- **DO NOT include any of the following in your commit messages:**")
+            prompt_parts.append("  * \"🤖 Generated with Claude Code\" or any variation of this text")
+            prompt_parts.append("  * \"Co-Authored-By:\" trailers or any author attribution lines")
+            prompt_parts.append("  * Any text that mentions Claude Code or Claude as an author")
             prompt_parts.append("")
             prompt_parts.append("RESPONSE FORMAT:")
             prompt_parts.append("Provide a CONCISE, scannable summary. NO pleasantries or preambles.")

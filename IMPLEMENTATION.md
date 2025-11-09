@@ -68,7 +68,7 @@ Codebot is organized into four main packages:
 - `generate_short_uuid()`: Creates 7-character UUID hash
 - `generate_branch_name()`: Creates branch names in format `u/codebot/[TICKET-ID/]uuid/short-name`
 - `generate_directory_name()`: Creates directory names in format `task_[TICKET-ID_]uuid`
-- `validate_github_token()`: Validates GitHub tokens
+- `validate_github_app_config()`: Validates GitHub App configuration
 - `get_git_env()`: Returns non-interactive Git environment
 - `extract_uuid_from_branch()`: Extracts UUID from branch names
 - `find_workspace_by_uuid()`: Finds workspace directories by UUID
@@ -242,13 +242,14 @@ Codebot is organized into four main packages:
 ## Configuration
 
 ### Environment Variables
-- `GITHUB_TOKEN`: GitHub personal access token (can be set via environment variable or .env file)
+- `GITHUB_APP_ID`: GitHub App ID (can be set via environment variable or .env file)
+- `GITHUB_APP_PRIVATE_KEY_PATH`: Path to GitHub App private key file
+- `GITHUB_APP_INSTALLATION_ID`: GitHub App installation ID
 
 ### Command-Line Options
 - `--task-prompt`: Inline task prompt (JSON/YAML)
 - `--task-prompt-file`: File path to task prompt
 - `--work-dir`: Base directory for work spaces
-- `--github-token`: GitHub token override
 - `--verbose`: Enable verbose output
 
 ## Testing

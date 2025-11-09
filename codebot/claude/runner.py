@@ -5,18 +5,23 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
+from codebot.core.github_app import GitHubAppAuth
+from codebot.core.utils import get_codebot_git_author_info, get_git_env
+
 
 class ClaudeRunner:
     """Runner for Claude Code CLI in headless mode."""
     
-    def __init__(self, work_dir: Path):
+    def __init__(self, work_dir: Path, github_app_auth: Optional[GitHubAppAuth] = None):
         """
         Initialize the Claude runner.
         
         Args:
             work_dir: Working directory where Claude Code should run
+            github_app_auth: Optional GitHub App authentication instance
         """
         self.work_dir = work_dir
+        self.github_app_auth = github_app_auth
         self._check_claude_installed()
     
     def _check_claude_installed(self) -> None:
@@ -74,14 +79,19 @@ class ClaudeRunner:
             "6. **Commit your changes with a very clear commit message highlighting the changes you made**\n"
             "   - Write descriptive commit messages that explain what was changed and why\n"
             "   - Use conventional commit format when appropriate\n"
-            "   - Include relevant details about the implementation approach\n\n"
+            "   - Include relevant details about the implementation approach\n"
+            "   - **CRITICAL: DO NOT include any of the following in your commit messages:**\n"
+            "     * \"🤖 Generated with Claude Code\" or any variation of this text\n"
+            "     * \"Co-Authored-By:\" trailers or any author attribution lines\n"
+            "     * Any text that mentions Claude Code or Claude as an author\n"
             "**Important Guidelines:**\n"
             "- Always prioritize code quality and maintainability\n"
             "- Follow the project's existing patterns and conventions\n"
             "- Consider edge cases and error handling\n"
             "- Document complex logic with clear comments\n"
             "- Ensure your changes are backward compatible when possible\n"
-            "- Complete the task fully before finishing - do not leave incomplete work"
+            "- Complete the task fully before finishing - do not leave incomplete work\n"
+            "- **NEVER add \"🤖 Generated with Claude Code\" or \"Co-Authored-By:\" to commit messages**"
         )
         
         if append_system_prompt:
@@ -100,6 +110,9 @@ class ClaudeRunner:
             "--dangerously-skip-permissions",  # Skip permission prompts for non-interactive mode
         ]
         
+        # Configure git author before running Claude Code CLI
+        self._configure_git_author()
+        
         print(f"Running Claude Code CLI in headless mode...")
         print(f"Task: {description}")
         print("=" * 80)
@@ -114,6 +127,51 @@ class ClaudeRunner:
         print(result.stdout)
         print("=" * 80)
         return result
+    
+    def _configure_git_author(self) -> None:
+        """Configure git author and committer information for codebot."""
+        if not self.github_app_auth or not self.work_dir:
+            return
+        
+        # Try to get bot user ID, fallback to app_id with warning
+        bot_user_id = self.github_app_auth.bot_user_id
+        if not bot_user_id:
+            # Fallback to app_id if bot_user_id retrieval failed
+            app_id = self.github_app_auth.app_id
+            if app_id:
+                print(f"Warning: Could not retrieve bot user ID, using app ID as fallback: {app_id}")
+                bot_user_id = app_id
+            else:
+                return
+        
+        author_info = get_codebot_git_author_info(bot_user_id)
+        env = get_git_env(bot_user_id=bot_user_id)
+        
+        # Set git config user.name
+        result = subprocess.run(
+            ["git", "config", "user.name", author_info["author_name"]],
+            cwd=self.work_dir,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        
+        if result.returncode != 0:
+            print(f"Warning: Failed to set git user.name: {result.stderr}")
+        
+        # Set git config user.email
+        result = subprocess.run(
+            ["git", "config", "user.email", author_info["author_email"]],
+            cwd=self.work_dir,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        
+        if result.returncode != 0:
+            print(f"Warning: Failed to set git user.email: {result.stderr}")
+        else:
+            print(f"Configured git author for Claude Code CLI: {author_info['author_name']} <{author_info['author_email']}>")
     
     def verify_changes_committed(self) -> bool:
         """

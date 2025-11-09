@@ -113,13 +113,14 @@ Base directory for workspaces (default: `./codebot_workspace`).
 codebot run --task-prompt-file task.yaml --work-dir /tmp/codebot
 ```
 
-### --github-token
+### GitHub App Configuration
 
-GitHub token for API access (default: `GITHUB_TOKEN` env var).
+GitHub App authentication is required via environment variables. See [Configuration Guide](../docs/configuration.md) for setup instructions.
 
-```bash
-codebot run --task-prompt-file task.yaml --github-token ghp_xxxxx
-```
+Required environment variables:
+- `GITHUB_APP_ID` - GitHub App ID
+- `GITHUB_APP_PRIVATE_KEY_PATH` - Path to private key file
+- `GITHUB_APP_INSTALLATION_ID` - Installation ID
 
 ### --verbose
 

@@ -15,7 +15,9 @@ The webhook server listens for GitHub events and:
 ### 1. Start Webhook Server
 
 ```bash
-export GITHUB_TOKEN="your_github_token"
+export GITHUB_APP_ID="123456"
+export GITHUB_APP_PRIVATE_KEY_PATH="./codebot-private-key.pem"
+export GITHUB_APP_INSTALLATION_ID="789012"
 export GITHUB_WEBHOOK_SECRET="your_webhook_secret"
 
 codebot serve --port 5000

@@ -44,11 +44,15 @@ uv sync
 source .venv/bin/activate
 ```
 
-### 2. Set Up GitHub Token
+### 2. Set Up GitHub App
 
 ```bash
-export GITHUB_TOKEN="your_github_token_here"
+export GITHUB_APP_ID="123456"
+export GITHUB_APP_PRIVATE_KEY_PATH="./codebot-private-key.pem"
+export GITHUB_APP_INSTALLATION_ID="789012"
 ```
+
+See [Configuration Guide](configuration.md) for detailed GitHub App setup instructions.
 
 ### 3. Run Your First Task
 

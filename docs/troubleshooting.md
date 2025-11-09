@@ -308,7 +308,9 @@ Common issues and solutions for Codebot setup, configuration, and usage.
 2. **Verify `.env` file format**:
    ```bash
    # Correct format (no quotes needed):
-   GITHUB_TOKEN=your_token_here
+   GITHUB_APP_ID=123456
+   GITHUB_APP_PRIVATE_KEY_PATH=./codebot-private-key.pem
+   GITHUB_APP_INSTALLATION_ID=789012
    GITHUB_ENTERPRISE_URL=https://github.company.com
    ```
 

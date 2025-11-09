@@ -112,6 +112,9 @@ class GitHubAppAuth:
         # Token cache
         self._installation_token: Optional[str] = None
         self._token_expires_at: float = 0
+        
+        # Bot user ID cache
+        self._bot_user_id: Optional[str] = None
     
     def get_installation_token(self) -> str:
         """
@@ -193,4 +196,74 @@ class GitHubAppAuth:
             "Authorization": f"token {token}",
             "Accept": "application/vnd.github.v3+json",
         }
+    
+    def get_bot_user_id(self) -> str:
+        """
+        Get the GitHub App bot user ID.
+        
+        The bot user ID is different from the App ID. It's the user ID of the
+        bot account that GitHub creates for the app (e.g., codebot-007[bot]).
+        
+        Returns:
+            Bot user ID as string
+            
+        Raises:
+            RuntimeError: If unable to retrieve bot user ID
+        """
+        # Return cached value if available
+        if self._bot_user_id:
+            return self._bot_user_id
+        
+        # Get installation token (required for API call)
+        token = self.get_installation_token()
+        
+        # Make API call to get bot user info
+        url = f"{self.api_url}/users/codebot-007[bot]"
+        headers = {
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json",
+        }
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code != 200:
+                error_data = response.json() if response.content else {}
+                error_msg = error_data.get("message", "Unknown error")
+                raise RuntimeError(
+                    f"Failed to get bot user ID: {error_msg}\n"
+                    f"Status code: {response.status_code}\n"
+                    f"Response: {error_data}"
+                )
+            
+            user_data = response.json()
+            bot_user_id = str(user_data.get("id"))
+            
+            if not bot_user_id:
+                raise RuntimeError("Bot user ID not found in API response")
+            
+            # Cache the result
+            self._bot_user_id = bot_user_id
+            return bot_user_id
+            
+        except requests.RequestException as e:
+            raise RuntimeError(f"Failed to retrieve bot user ID: {e}")
+    
+    @property
+    def bot_user_id(self) -> Optional[str]:
+        """
+        Get the GitHub App bot user ID (cached property).
+        
+        Returns:
+            Bot user ID as string, or None if retrieval fails
+        """
+        if self._bot_user_id:
+            return self._bot_user_id
+        
+        try:
+            return self.get_bot_user_id()
+        except Exception as e:
+            # Log warning but don't fail - allow fallback to app_id
+            print(f"Warning: Could not retrieve bot user ID: {e}")
+            return None
 

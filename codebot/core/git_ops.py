@@ -24,7 +24,13 @@ class GitOps:
     
     def _get_git_env(self) -> dict:
         """Get git environment variables for non-interactive operation."""
-        return get_git_env()
+        bot_user_id = None
+        if self.github_app_auth:
+            bot_user_id = self.github_app_auth.bot_user_id
+            # Fallback to app_id if bot_user_id is not available
+            if not bot_user_id:
+                bot_user_id = self.github_app_auth.app_id
+        return get_git_env(bot_user_id=bot_user_id)
     
     def _create_authenticated_url(self, repository_url: str) -> str:
         """
@@ -249,4 +255,70 @@ class GitOps:
             raise RuntimeError(f"Failed to get commit message: {result.stderr}")
         
         return result.stdout.strip()
+    
+    def remove_co_author_trailers(self) -> None:
+        """
+        Remove Co-Authored-By trailers and unwanted text from the latest commit.
+        
+        Claude Code CLI adds "Co-Authored-By: Claude" trailers and "🤖 Generated with Claude Code"
+        text to commits. This method rewrites the commit to remove those.
+        """
+        env = self._get_git_env()
+        
+        # Get the current commit message
+        result = subprocess.run(
+            ["git", "log", "-1", "--pretty=format:%B"],
+            cwd=self.work_dir,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        
+        if result.returncode != 0:
+            print(f"Warning: Failed to get commit message: {result.stderr}")
+            return
+        
+        commit_message = result.stdout
+        
+        # Check if there are any unwanted lines to remove
+        lines = commit_message.split("\n")
+        cleaned_lines = []
+        has_unwanted = False
+        
+        for line in lines:
+            stripped = line.strip()
+            # Remove Co-Authored-By trailers
+            if stripped.startswith("Co-Authored-By:"):
+                has_unwanted = True
+                continue
+            # Remove "🤖 Generated with Claude Code" (exact match or contains)
+            if stripped == "🤖 Generated with Claude Code" or "🤖 Generated with Claude Code" in stripped:
+                has_unwanted = True
+                continue
+            cleaned_lines.append(line)
+        
+        # If no unwanted content found, nothing to do
+        if not has_unwanted:
+            return
+        
+        # Reconstruct cleaned commit message
+        cleaned_message = "\n".join(cleaned_lines).strip()
+        # Remove any trailing empty lines
+        while cleaned_message.endswith("\n\n"):
+            cleaned_message = cleaned_message[:-1]
+        
+        # Amend the commit with cleaned message
+        # We need to preserve the author/committer, so we use environment variables
+        result = subprocess.run(
+            ["git", "commit", "--amend", "-m", cleaned_message],
+            cwd=self.work_dir,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        
+        if result.returncode != 0:
+            print(f"Warning: Failed to clean commit message: {result.stderr}")
+        else:
+            print("Cleaned commit message (removed Co-Authored-By trailers and unwanted text)")
 

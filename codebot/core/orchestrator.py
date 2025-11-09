@@ -125,7 +125,7 @@ class Orchestrator:
         if not self.work_dir:
             return
         
-        self.claude_runner = ClaudeRunner(self.work_dir)
+        self.claude_runner = ClaudeRunner(self.work_dir, github_app_auth=self.github_app_auth)
         self.git_ops = GitOps(self.work_dir, github_app_auth=self.github_app_auth)
         
         # Capture git state before Claude runs
@@ -152,6 +152,10 @@ class Orchestrator:
             print(f"\n✅ Claude made changes!")
             print(f"Before: {before_commit or 'No commits'}")
             print(f"After:  {after_commit}")
+            
+            # Remove Co-Authored-By trailers from commits to ensure only codebot-007[bot] shows as author
+            print("\nCleaning commit trailers...")
+            self.git_ops.remove_co_author_trailers()
             
             # Show what changed
             self._show_git_changes(before_commit, after_commit)

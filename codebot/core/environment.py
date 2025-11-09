@@ -10,6 +10,7 @@ from codebot.core.utils import (
     generate_branch_name, 
     generate_directory_name, 
     generate_short_uuid, 
+    get_codebot_git_author_info,
     get_git_env,
     is_github_url
 )
@@ -54,6 +55,9 @@ class EnvironmentManager:
         # Clone repository
         self._clone_repository()
         
+        # Configure git author for codebot
+        self._configure_git_author()
+        
         # Detect default branch
         self.default_branch = self._detect_default_branch()
         print(f"Detected default branch: {self.default_branch}")
@@ -94,6 +98,9 @@ class EnvironmentManager:
         
         # Update workspace to latest remote state
         self._update_workspace()
+        
+        # Configure git author for codebot
+        self._configure_git_author()
         
         return self.work_dir
     
@@ -326,3 +333,48 @@ class EnvironmentManager:
             raise RuntimeError(
                 f"Failed to create branch {branch_name}: {result.stderr}"
             )
+    
+    def _configure_git_author(self) -> None:
+        """Configure git author and committer information for codebot."""
+        if not self.github_app_auth or not self.work_dir:
+            return
+        
+        # Try to get bot user ID, fallback to app_id with warning
+        bot_user_id = self.github_app_auth.bot_user_id
+        if not bot_user_id:
+            # Fallback to app_id if bot_user_id retrieval failed
+            app_id = self.github_app_auth.app_id
+            if app_id:
+                print(f"Warning: Could not retrieve bot user ID, using app ID as fallback: {app_id}")
+                bot_user_id = app_id
+            else:
+                return
+        
+        author_info = get_codebot_git_author_info(bot_user_id)
+        env = get_git_env()
+        
+        # Set git config user.name
+        result = subprocess.run(
+            ["git", "config", "user.name", author_info["author_name"]],
+            cwd=self.work_dir,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        
+        if result.returncode != 0:
+            print(f"Warning: Failed to set git user.name: {result.stderr}")
+        
+        # Set git config user.email
+        result = subprocess.run(
+            ["git", "config", "user.email", author_info["author_email"]],
+            cwd=self.work_dir,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        
+        if result.returncode != 0:
+            print(f"Warning: Failed to set git user.email: {result.stderr}")
+        else:
+            print(f"Configured git author: {author_info['author_name']} <{author_info['author_email']}>")
