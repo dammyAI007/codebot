@@ -4,15 +4,23 @@ Codebot can automatically respond to PR review comments by making code changes o
 
 ## Overview
 
-The webhook server listens for GitHub events and:
-- Receives PR review comments
-- Classifies them as queries or change requests
-- Responds with answers or code changes
-- Updates PR descriptions after changes
+Codebot can receive PR review comments via two methods:
+- **Webhooks** (default): GitHub sends events directly to the server
+- **Polling**: Server periodically checks PRs for new comments (for GitHub Enterprise environments where webhooks cannot reach the server)
+
+Both methods:
+- Receive PR review comments
+- Classify them as queries or change requests
+- Respond with answers or code changes
+- Update PR descriptions after changes
+
+**Note**: Webhooks and polling are mutually exclusive - use one or the other, not both.
 
 ## Setup
 
-### 1. Start Webhook Server
+### Option 1: Webhook Mode (Default)
+
+#### 1. Start Webhook Server
 
 ```bash
 export GITHUB_APP_ID="123456"
@@ -23,7 +31,7 @@ export GITHUB_WEBHOOK_SECRET="your_webhook_secret"
 codebot serve --port 5000
 ```
 
-### 2. Expose Server (Development)
+#### 2. Expose Server (Development)
 
 For local testing, use a tool like [ngrok](https://ngrok.com):
 
@@ -33,7 +41,7 @@ ngrok http 5000
 
 This gives you a public URL like `https://abc123.ngrok.io`.
 
-### 3. Configure GitHub Webhook
+#### 3. Configure GitHub Webhook
 
 1. Go to your repository **Settings** → **Webhooks**
 2. Click **Add webhook**
@@ -47,7 +55,7 @@ This gives you a public URL like `https://abc123.ngrok.io`.
      - ✅ Pull request review comments
 4. Click **Add webhook**
 
-### 4. Verify Setup
+#### 4. Verify Setup
 
 Check the health endpoint:
 
@@ -63,6 +71,57 @@ Response:
   "review_queue_size": 0
 }
 ```
+
+### Option 2: Polling Mode (For GitHub Enterprise)
+
+When webhooks cannot reach your server (e.g., GitHub Enterprise behind firewall), use polling mode:
+
+#### 1. Start Server with Polling Enabled
+
+```bash
+export GITHUB_APP_ID="123456"
+export GITHUB_APP_PRIVATE_KEY_PATH="./codebot-private-key.pem"
+export GITHUB_APP_INSTALLATION_ID="789012"
+export CODEBOT_POLL_INTERVAL="300"  # Optional: poll interval in seconds (default: 300)
+
+codebot serve --port 5000 --enable-polling
+```
+
+**Note**: Do NOT set `GITHUB_WEBHOOK_SECRET` when using polling mode.
+
+#### 2. Configure Poll Interval (Optional)
+
+Set poll interval via environment variable or CLI option:
+
+```bash
+# Via environment variable
+export CODEBOT_POLL_INTERVAL="600"  # Poll every 10 minutes
+
+# Via CLI option
+codebot serve --enable-polling --poll-interval 600
+```
+
+Default: 300 seconds (5 minutes)
+
+#### How Polling Works
+
+- Polls PRs for tasks with `pending_review` status
+- Only fetches comments created since last poll (uses GitHub API `since` parameter)
+- Tracks processed comments to avoid duplicates
+- Updates task status when PR is merged (`completed`) or closed (`rejected`)
+
+**Important**: Polling only checks PRs for tasks that are in `pending_review` status. Tasks transition to this status automatically after PR creation.
+
+## Task Status Lifecycle
+
+Tasks progress through these statuses:
+
+- `pending` → Task queued, waiting to start
+- `running` → Task is being executed
+- `pending_review` → PR created, waiting for review/approval
+- `completed` → PR merged successfully
+- `rejected` → PR closed without merge
+- `failed` → Task execution failed
 
 ## How It Works
 

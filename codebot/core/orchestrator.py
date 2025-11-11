@@ -87,6 +87,9 @@ class Orchestrator:
             
             # Steps 8-9: Summary and cleanup
             print("\n[8-9/9] Task completed successfully!")
+            
+            # Note: Task status should be updated to pending_review by the caller
+            # after PR is created (in task_processor or cli_runner)
             print("\n" + "=" * 60)
             print("SUMMARY")
             print("=" * 60)

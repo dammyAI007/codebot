@@ -2,10 +2,14 @@
 
 import hashlib
 import os
+import shutil
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 from urllib.parse import urlparse
+
+from codebot.core.task_store import global_task_store
 
 
 def validate_github_app_config(api_url: Optional[str] = None, repository_url: Optional[str] = None, verbose: bool = False) -> Tuple[bool, Optional[str]]:
@@ -367,8 +371,6 @@ def cleanup_workspace(workspace_path: Path) -> bool:
     Returns:
         True if deletion was successful, False otherwise
     """
-    import shutil
-    
     if not workspace_path.exists():
         return False
     
@@ -381,3 +383,71 @@ def cleanup_workspace(workspace_path: Path) -> bool:
     except Exception as e:
         print(f"Warning: Failed to delete workspace {workspace_path}: {e}")
         return False
+
+
+def cleanup_pr_workspace(
+    branch_name: str,
+    workspace_base_dir: Path,
+    pr_number: Optional[int] = None,
+    pr_url: Optional[str] = None,
+    merged: Optional[bool] = None,
+) -> tuple[bool, str]:
+    """
+    Central function to clean up workspace for a closed PR.
+    
+    This function:
+    1. Extracts UUID from branch name
+    2. Finds workspace by UUID
+    3. Updates task status (completed/rejected) if merged parameter is provided
+    4. Deletes workspace directory
+    
+    Args:
+        branch_name: Branch name (e.g., "u/codebot/TASK-123/abc1234/feature")
+        workspace_base_dir: Base directory containing workspaces
+        pr_number: Optional PR number for logging
+        pr_url: Optional PR URL for finding task
+        merged: Optional boolean indicating if PR was merged (for task status update)
+        
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    # Only clean up workspaces for codebot branches
+    if not branch_name.startswith("u/codebot/"):
+        return False, "Not a codebot branch"
+    
+    # Extract UUID from branch name
+    uuid = extract_uuid_from_branch(branch_name)
+    if not uuid:
+        return False, f"Could not extract UUID from branch: {branch_name}"
+    
+    # Find workspace by UUID
+    workspace_path = find_workspace_by_uuid(workspace_base_dir, uuid)
+    if not workspace_path:
+        return False, f"No workspace found for UUID: {uuid}"
+    
+    # Find task and update status if merged parameter is provided
+    task = global_task_store.find_task_by_branch_uuid(uuid)
+    if not task and pr_url:
+        task = global_task_store.find_task_by_pr_url(pr_url)
+    
+    # Update task status if merged parameter is provided
+    if task and merged is not None:
+        if merged:
+            global_task_store.update_task(
+                task.id,
+                status="completed",
+                completed_at=datetime.utcnow()
+            )
+        else:
+            global_task_store.update_task(
+                task.id,
+                status="rejected",
+                completed_at=datetime.utcnow()
+            )
+    
+    # Clean up workspace
+    if cleanup_workspace(workspace_path):
+        pr_info = f"PR #{pr_number}" if pr_number else "PR"
+        return True, f"Successfully cleaned up workspace for {pr_info}: {workspace_path}"
+    else:
+        return False, f"Failed to delete workspace: {workspace_path}"

@@ -486,3 +486,113 @@ class GitHubPR:
         thread_comments.sort(key=lambda c: c["created_at"])
         
         return thread_comments
+    
+    def get_pr_review_comments(
+        self,
+        owner: str,
+        repo: str,
+        pr_number: int,
+        since: Optional[str] = None,
+    ) -> list:
+        """
+        Get review comments for a pull request.
+        
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            pr_number: Pull request number
+            since: Optional ISO 8601 timestamp to fetch only comments created after this time
+            
+        Returns:
+            List of review comments
+        """
+        url = self._build_api_url_from_owner_repo(owner, repo, f"repos/{owner}/{repo}/pulls/{pr_number}/comments")
+        params = {}
+        if since:
+            params["since"] = since
+        response = requests.get(url, headers=self.headers, params=params)
+        
+        if response.status_code != 200:
+            raise RuntimeError(f"Failed to get PR review comments: {response.status_code}")
+        
+        return response.json()
+    
+    def get_pr_issue_comments(
+        self,
+        owner: str,
+        repo: str,
+        pr_number: int,
+        since: Optional[str] = None,
+    ) -> list:
+        """
+        Get issue comments for a pull request.
+        
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            pr_number: Pull request number
+            since: Optional ISO 8601 timestamp to fetch only comments created after this time
+            
+        Returns:
+            List of issue comments
+        """
+        url = self._build_api_url_from_owner_repo(owner, repo, f"repos/{owner}/{repo}/issues/{pr_number}/comments")
+        params = {}
+        if since:
+            params["since"] = since
+        response = requests.get(url, headers=self.headers, params=params)
+        
+        if response.status_code != 200:
+            raise RuntimeError(f"Failed to get PR issue comments: {response.status_code}")
+        
+        return response.json()
+    
+    def get_pr_reviews(
+        self,
+        owner: str,
+        repo: str,
+        pr_number: int,
+        since: Optional[str] = None,
+    ) -> list:
+        """
+        Get reviews for a pull request.
+        
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            pr_number: Pull request number
+            since: Optional ISO 8601 timestamp to fetch only reviews created after this time
+            
+        Returns:
+            List of PR reviews
+        """
+        url = self._build_api_url_from_owner_repo(owner, repo, f"repos/{owner}/{repo}/pulls/{pr_number}/reviews")
+        params = {}
+        if since:
+            params["since"] = since
+        response = requests.get(url, headers=self.headers, params=params)
+        
+        if response.status_code != 200:
+            raise RuntimeError(f"Failed to get PR reviews: {response.status_code}")
+        
+        return response.json()
+    
+    def get_pr_state(self, owner: str, repo: str, pr_number: int) -> dict:
+        """
+        Get current PR state (open/closed/merged).
+        
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            pr_number: Pull request number
+            
+        Returns:
+            Dictionary with PR state information (state, merged, etc.)
+        """
+        pr_details = self.get_pr_details(owner, repo, pr_number)
+        return {
+            "state": pr_details.get("state"),  # open, closed
+            "merged": pr_details.get("merged", False),
+            "merged_at": pr_details.get("merged_at"),
+            "closed_at": pr_details.get("closed_at"),
+        }

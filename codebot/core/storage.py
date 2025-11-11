@@ -118,4 +118,93 @@ class TaskStorage(ABC):
     def close(self) -> None:
         """Close storage connection and cleanup resources."""
         pass
+    
+    def is_comment_processed(
+        self,
+        comment_id: int,
+        repo_owner: str,
+        repo_name: str,
+        pr_number: int,
+        comment_type: str,
+    ) -> bool:
+        """
+        Check if a comment has already been processed.
+        
+        Args:
+            comment_id: Comment ID
+            repo_owner: Repository owner
+            repo_name: Repository name
+            pr_number: PR number
+            comment_type: Type of comment (review_comment, issue_comment, review)
+            
+        Returns:
+            True if comment was already processed
+        """
+        return False
+    
+    def mark_comment_processed(
+        self,
+        comment_id: int,
+        repo_owner: str,
+        repo_name: str,
+        pr_number: int,
+        comment_type: str,
+    ) -> None:
+        """
+        Mark a comment as processed.
+        
+        Args:
+            comment_id: Comment ID
+            repo_owner: Repository owner
+            repo_name: Repository name
+            pr_number: PR number
+            comment_type: Type of comment (review_comment, issue_comment, review)
+        """
+        pass
+    
+    def get_last_poll_time(
+        self,
+        repo_owner: str,
+        repo_name: str,
+        pr_number: int,
+    ) -> Optional[datetime]:
+        """
+        Get the last poll time for a PR.
+        
+        Args:
+            repo_owner: Repository owner
+            repo_name: Repository name
+            pr_number: PR number
+            
+        Returns:
+            Last poll time or None if never polled
+        """
+        return None
+    
+    def update_last_poll_time(
+        self,
+        repo_owner: str,
+        repo_name: str,
+        pr_number: int,
+        poll_time: datetime,
+    ) -> None:
+        """
+        Update the last poll time for a PR.
+        
+        Args:
+            repo_owner: Repository owner
+            repo_name: Repository name
+            pr_number: PR number
+            poll_time: Time of the poll
+        """
+        pass
+    
+    def cleanup_old_processed_comments(self, retention_seconds: int) -> None:
+        """
+        Clean up old processed comment records.
+        
+        Args:
+            retention_seconds: Number of seconds to retain records
+        """
+        pass
 

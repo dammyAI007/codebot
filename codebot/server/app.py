@@ -48,6 +48,24 @@ from codebot.core.utils import validate_github_app_config
     default=1,
     help="Number of task processor worker threads (default: 1)",
 )
+@click.option(
+    "--enable-polling",
+    is_flag=True,
+    default=False,
+    help="Enable polling mode instead of webhooks (mutually exclusive with webhooks)",
+)
+@click.option(
+    "--poll-interval",
+    type=int,
+    default=None,
+    help="Poll interval in seconds (default: 300 or CODEBOT_POLL_INTERVAL env var)",
+)
+@click.option(
+    "--reset-poll-times",
+    is_flag=True,
+    default=False,
+    help="Reset poll times for all pending_review PRs to start from PR creation time",
+)
 def serve(
     port: int,
     work_dir: str,
@@ -55,6 +73,9 @@ def serve(
     debug: bool,
     api_key: str,
     workers: int,
+    enable_polling: bool,
+    poll_interval: int,
+    reset_poll_times: bool,
 ) -> None:
     """
     Start webhook server to handle PR review comments, HTTP task submissions, and web interface.
@@ -119,15 +140,37 @@ def serve(
     # Create GitHub App auth instance
     github_app_auth = GitHubAppAuth()
     
-    # Get webhook secret
-    effective_secret = webhook_secret or os.getenv("GITHUB_WEBHOOK_SECRET")
+    # Get poll interval
+    effective_poll_interval = poll_interval
+    if effective_poll_interval is None:
+        poll_interval_env = os.getenv("CODEBOT_POLL_INTERVAL")
+        if poll_interval_env:
+            try:
+                effective_poll_interval = int(poll_interval_env)
+            except ValueError:
+                click.echo("Warning: Invalid CODEBOT_POLL_INTERVAL, using default 300", err=True)
+                effective_poll_interval = 300
+        else:
+            effective_poll_interval = 300
     
-    if not effective_secret:
-        click.echo("Error: Webhook secret is required. Set GITHUB_WEBHOOK_SECRET env var or use --webhook-secret", err=True)
-        sys.exit(1)
-    
-    # Set webhook secret in environment for the server
-    os.environ["GITHUB_WEBHOOK_SECRET"] = effective_secret
+    # Handle polling vs webhook mode
+    if enable_polling:
+        # Polling mode: ignore webhook secrets completely
+        print(f"Polling mode enabled (interval: {effective_poll_interval}s)")
+        # Clear webhook secret from environment to ensure webhook endpoint is disabled
+        if "GITHUB_WEBHOOK_SECRET" in os.environ:
+            del os.environ["GITHUB_WEBHOOK_SECRET"]
+    else:
+        # Webhook mode: require webhook secret
+        effective_secret = webhook_secret or os.getenv("GITHUB_WEBHOOK_SECRET")
+        
+        if not effective_secret:
+            click.echo("Error: Webhook secret is required when not using polling. Set GITHUB_WEBHOOK_SECRET env var, use --webhook-secret, or use --enable-polling", err=True)
+            sys.exit(1)
+        
+        # Set webhook secret in environment for the server
+        os.environ["GITHUB_WEBHOOK_SECRET"] = effective_secret
+        print("Webhook mode enabled")
     
     # Handle API keys
     if api_key:
@@ -154,7 +197,10 @@ def serve(
     print(f"Work directory: {work_base_dir}")
     print(f"Web interface: http://localhost:{port}/")
     print(f"Health check: http://localhost:{port}/health")
-    print(f"Webhook endpoint: http://localhost:{port}/webhook")
+    if not enable_polling:
+        print(f"Webhook endpoint: http://localhost:{port}/webhook")
+    else:
+        print(f"Polling mode: checking PRs every {effective_poll_interval}s")
     
     if api_enabled:
         print(f"API endpoints: http://localhost:{port}/api/tasks/submit")
@@ -171,14 +217,50 @@ def serve(
     from codebot.server.flask_app import create_app, start_server
     
     # Create and start review processor in background thread
-    review_processor = ReviewProcessor(
-        review_queue=review_queue,
-        workspace_base_dir=work_base_dir,
-        github_app_auth=github_app_auth,
-    )
+    # Only start in child process when using Flask reloader (debug mode)
+    # WERKZEUG_RUN_MAIN is set to 'true' in the child process
+    review_processor = None
+    review_processor_thread = None
+    if debug and os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+        # Parent process - skip starting review processor
+        pass
+    else:
+        # Child process or not using reloader - start review processor
+        review_processor = ReviewProcessor(
+            review_queue=review_queue,
+            workspace_base_dir=work_base_dir,
+            github_app_auth=github_app_auth,
+        )
+        
+        review_processor_thread = threading.Thread(target=review_processor.start, daemon=True)
+        review_processor_thread.start()
     
-    review_processor_thread = threading.Thread(target=review_processor.start, daemon=True)
-    review_processor_thread.start()
+    # Create and start poller if polling is enabled
+    # Only start in child process when using Flask reloader (debug mode)
+    # WERKZEUG_RUN_MAIN is set to 'true' in the child process
+    poller = None
+    poller_thread = None
+    if enable_polling:
+        werkzeug_main = os.environ.get('WERKZEUG_RUN_MAIN')
+        # In debug mode with reloader, only start poller in child process
+        if debug and werkzeug_main != 'true':
+            # Parent process - skip starting poller
+            print(f"Skipping poller start in parent process (WERKZEUG_RUN_MAIN={werkzeug_main})")
+        else:
+            # Child process or not using reloader - start poller
+            print(f"Starting poller (debug={debug}, WERKZEUG_RUN_MAIN={werkzeug_main})")
+            from codebot.server.poller import GitHubPoller
+            
+            poller = GitHubPoller(
+                review_queue=review_queue,
+                workspace_base_dir=work_base_dir,
+                github_app_auth=github_app_auth,
+                poll_interval=effective_poll_interval,
+                reset_poll_times=reset_poll_times,
+            )
+            
+            poller_thread = threading.Thread(target=poller.start, daemon=True)
+            poller_thread.start()
     
     # Create task queue and processor if API is enabled
     task_processor = None
@@ -199,15 +281,24 @@ def serve(
     # Get bot login for comment detection
     bot_login = github_app_auth.get_bot_login()
     
-    # Create Flask app
-    app = create_app(task_queue=task_queue, bot_login=bot_login, workspace_base_dir=work_base_dir, github_app_auth=github_app_auth)
+    # Create Flask app (disable webhook endpoint if polling is enabled)
+    app = create_app(
+        task_queue=task_queue,
+        bot_login=bot_login,
+        workspace_base_dir=work_base_dir,
+        github_app_auth=github_app_auth,
+        enable_webhook=not enable_polling,
+    )
     
     # Start Flask server (blocking)
     try:
         start_server(app, port=port, debug=debug)
     except KeyboardInterrupt:
         print("\n\nShutting down...")
-        review_processor.stop()
+        if review_processor:
+            review_processor.stop()
+        if poller:
+            poller.stop()
         if task_processor:
             task_processor.stop()
         sys.exit(0)

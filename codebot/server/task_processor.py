@@ -128,15 +128,15 @@ class TaskProcessor:
                 "work_dir": str(orchestrator.work_dir) if orchestrator.work_dir else None,
             }
             
-            # Update status to completed
+            # PR created - task is now pending review
             self.task_queue.update_status(
                 task_id,
-                status="completed",
-                completed_at=datetime.utcnow(),
+                status="pending_review",
+                completed_at=None,
                 result=result
             )
             
-            print(f"Task {task_id} completed successfully")
+            print(f"Task {task_id} PR created - pending review")
             
         except Exception as e:
             print(f"ERROR: Task {task_id} failed: {e}")

@@ -6,7 +6,17 @@ import os
 from pathlib import Path
 from queue import Queue
 
+from datetime import datetime
+
 from flask import current_app, request, jsonify
+
+from codebot.core.task_store import global_task_store
+from codebot.core.utils import (
+    cleanup_pr_workspace,
+    cleanup_workspace,
+    extract_uuid_from_branch,
+    find_workspace_by_uuid,
+)
 
 
 # Global FIFO queue for review comments
@@ -267,21 +277,19 @@ def handle_pull_request(payload: dict) -> tuple:
     """
     action = payload.get("action")
     
-    # Only handle closed PRs (merged or just closed)
-    if action != "closed":
+    # Handle closed PRs (merged or just closed) and reopened PRs
+    if action not in ["closed", "reopened"]:
         return jsonify({"message": f"Ignoring action: {action}"}), 200
     
     pull_request = payload.get("pull_request", {})
     branch_name = pull_request.get("head", {}).get("ref", "")
     
-    # Only clean up workspaces for codebot branches
+    # Only handle codebot branches
     if not branch_name.startswith("u/codebot/"):
         current_app.logger.info(f"Ignoring non-codebot branch: {branch_name}")
         return jsonify({"message": "Not a codebot branch"}), 200
     
     # Extract UUID from branch name
-    from codebot.core.utils import extract_uuid_from_branch, find_workspace_by_uuid, cleanup_workspace
-    
     uuid = extract_uuid_from_branch(branch_name)
     if not uuid:
         current_app.logger.warning(f"Could not extract UUID from branch: {branch_name}")
@@ -301,22 +309,49 @@ def handle_pull_request(payload: dict) -> tuple:
         current_app.logger.info(f"No workspace found for UUID: {uuid}")
         return jsonify({"message": "Workspace not found"}), 200
     
-    # Check if PR was merged or just closed
-    merged = pull_request.get("merged", False)
+    # Update task status based on PR state
     pr_number = pull_request.get("number")
+    pr_url = pull_request.get("html_url")
     
-    if merged:
-        current_app.logger.info(f"PR #{pr_number} merged, cleaning up workspace: {workspace_path}")
-    else:
-        current_app.logger.info(f"PR #{pr_number} closed (not merged), cleaning up workspace: {workspace_path}")
+    task = global_task_store.find_task_by_branch_uuid(uuid)
+    if not task and pr_url:
+        task = global_task_store.find_task_by_pr_url(pr_url)
     
-    # Clean up workspace
-    if cleanup_workspace(workspace_path):
-        current_app.logger.info(f"Successfully cleaned up workspace: {workspace_path}")
+    # Handle reopened PRs
+    if action == "reopened":
+        if task:
+            current_app.logger.info(f"PR #{pr_number} reopened, updating task {task.id} back to pending_review")
+            global_task_store.update_task(
+                task.id,
+                status="pending_review",
+                completed_at=None
+            )
+        return jsonify({"message": "PR reopened, task status updated"}), 200
+    
+    # Handle closed PRs (merged or just closed)
+    merged = pull_request.get("merged", False)
+    
+    # Clean up workspace using central cleanup function (also updates task status)
+    success, message = cleanup_pr_workspace(
+        branch_name=branch_name,
+        workspace_base_dir=workspace_base_dir,
+        pr_number=pr_number,
+        pr_url=pr_url,
+        merged=merged,
+    )
+    
+    if task:
+        if merged:
+            current_app.logger.info(f"PR #{pr_number} merged, task {task.id} updated to completed")
+        else:
+            current_app.logger.info(f"PR #{pr_number} closed (not merged), task {task.id} updated to rejected")
+    
+    if success:
+        current_app.logger.info(message)
         return jsonify({"message": "Workspace cleaned up successfully"}), 200
     else:
-        current_app.logger.warning(f"Failed to clean up workspace: {workspace_path}")
-        return jsonify({"message": "Failed to clean up workspace"}), 500
+        current_app.logger.warning(message)
+        return jsonify({"message": message}), 500
 
 
 

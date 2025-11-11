@@ -153,7 +153,7 @@ def run(
         )
         orchestrator.run()
         
-        # Task completed successfully
+        # PR created - task is now pending review
         result = {
             "pr_url": orchestrator.pr_url,
             "branch_name": orchestrator.branch_name,
@@ -161,8 +161,8 @@ def run(
         }
         global_task_store.update_task(
             task_id,
-            status="completed",
-            completed_at=datetime.utcnow(),
+            status="pending_review",
+            completed_at=None,
             result=result,
         )
         

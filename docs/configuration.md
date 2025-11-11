@@ -60,13 +60,28 @@ GITHUB_APP_INSTALLATION_ID=789012
 
 #### GITHUB_WEBHOOK_SECRET
 
-**Required**: For webhook server  
+**Required**: For webhook server (not needed for polling mode)  
 **Description**: Secret for verifying GitHub webhook signatures  
 **Example**: Any secure random string
 
 ```bash
 export GITHUB_WEBHOOK_SECRET="your_webhook_secret_here"
 ```
+
+**Note**: Not required when using `--enable-polling` mode. Webhooks and polling are mutually exclusive.
+
+#### CODEBOT_POLL_INTERVAL
+
+**Required**: No  
+**Default**: 300 (5 minutes)  
+**Description**: Poll interval in seconds for polling mode  
+**Example**: `600` (10 minutes)
+
+```bash
+export CODEBOT_POLL_INTERVAL="600"
+```
+
+**Note**: Only used when `--enable-polling` is set. Lower values increase API usage but reduce latency.
 
 ### HTTP API Configuration
 
@@ -119,8 +134,11 @@ GITHUB_APP_ID=123456
 GITHUB_APP_PRIVATE_KEY_PATH=./codebot-private-key.pem
 GITHUB_APP_INSTALLATION_ID=789012
 
-# GitHub Webhook Configuration
+# GitHub Webhook Configuration (not needed for polling mode)
 GITHUB_WEBHOOK_SECRET=your_webhook_secret_here
+
+# Polling Configuration (only used with --enable-polling)
+CODEBOT_POLL_INTERVAL=300
 
 # GitHub Enterprise Configuration (if using enterprise)
 GITHUB_ENTERPRISE_URL=https://github.company.com
@@ -160,10 +178,12 @@ codebot serve [OPTIONS]
 
 - `--port INTEGER` - Server port (default: 5000)
 - `--work-dir PATH` - Base directory for workspaces
-- `--webhook-secret TEXT` - Webhook secret (overrides env var)
+- `--webhook-secret TEXT` - Webhook secret (overrides env var, not used with polling)
 - `--api-key TEXT` - API key (overrides env var)
 - `--workers INTEGER` - Number of worker threads (default: 1)
 - `--debug` - Enable debug mode with auto-reload
+- `--enable-polling` - Enable polling mode instead of webhooks (mutually exclusive)
+- `--poll-interval INTEGER` - Poll interval in seconds (default: 300, overrides CODEBOT_POLL_INTERVAL)
 
 ## GitHub App Setup
 

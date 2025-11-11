@@ -17,6 +17,7 @@ def create_app(
     bot_login: Optional[str] = None,
     workspace_base_dir: Optional[Path] = None,
     github_app_auth: Optional["GitHubAppAuth"] = None,
+    enable_webhook: bool = True,
 ) -> Flask:
     """
     Create and configure Flask application.
@@ -52,15 +53,19 @@ def create_app(
     if github_app_auth:
         app.github_app_auth = github_app_auth
     
-    # Register webhook handlers
-    from codebot.server import webhook
-    
-    app.add_url_rule(
-        "/webhook",
-        "handle_webhook",
-        webhook.handle_webhook,
-        methods=["POST"]
-    )
+    # Register webhook handlers (only if webhooks are enabled)
+    if enable_webhook:
+        from codebot.server import webhook
+        
+        app.add_url_rule(
+            "/webhook",
+            "handle_webhook",
+            webhook.handle_webhook,
+            methods=["POST"]
+        )
+        print("Webhook endpoint registered at /webhook")
+    else:
+        print("Webhook endpoint disabled (polling mode enabled)")
     
     # Register web UI blueprint
     from codebot.server.web_ui import create_web_ui_blueprint

@@ -56,6 +56,32 @@ class SQLiteTaskStorage(TaskStorage):
             CREATE INDEX IF NOT EXISTS idx_submitted_at ON tasks(submitted_at)
         """)
         
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS processed_comments (
+                comment_id INTEGER NOT NULL,
+                repo_owner TEXT NOT NULL,
+                repo_name TEXT NOT NULL,
+                pr_number INTEGER NOT NULL,
+                comment_type TEXT NOT NULL,
+                processed_at TEXT NOT NULL,
+                PRIMARY KEY (comment_id, repo_owner, repo_name, pr_number, comment_type)
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_processed_comments_pr ON processed_comments(repo_owner, repo_name, pr_number)
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS pr_poll_times (
+                repo_owner TEXT NOT NULL,
+                repo_name TEXT NOT NULL,
+                pr_number INTEGER NOT NULL,
+                last_polled_at TEXT NOT NULL,
+                PRIMARY KEY (repo_owner, repo_name, pr_number)
+            )
+        """)
+        
         self.conn.commit()
     
     def _serialize_datetime(self, dt: Optional[datetime]) -> Optional[str]:
@@ -298,4 +324,94 @@ class SQLiteTaskStorage(TaskStorage):
     def close(self) -> None:
         """Close storage connection."""
         self.conn.close()
+    
+    def is_comment_processed(
+        self,
+        comment_id: int,
+        repo_owner: str,
+        repo_name: str,
+        pr_number: int,
+        comment_type: str,
+    ) -> bool:
+        """Check if a comment has already been processed."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT 1 FROM processed_comments
+            WHERE comment_id = ? AND repo_owner = ? AND repo_name = ? 
+            AND pr_number = ? AND comment_type = ?
+        """, (comment_id, repo_owner, repo_name, pr_number, comment_type))
+        return cursor.fetchone() is not None
+    
+    def mark_comment_processed(
+        self,
+        comment_id: int,
+        repo_owner: str,
+        repo_name: str,
+        pr_number: int,
+        comment_type: str,
+    ) -> None:
+        """Mark a comment as processed."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO processed_comments
+            (comment_id, repo_owner, repo_name, pr_number, comment_type, processed_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            comment_id,
+            repo_owner,
+            repo_name,
+            pr_number,
+            comment_type,
+            self._serialize_datetime(datetime.utcnow()),
+        ))
+        self.conn.commit()
+    
+    def get_last_poll_time(
+        self,
+        repo_owner: str,
+        repo_name: str,
+        pr_number: int,
+    ) -> Optional[datetime]:
+        """Get the last poll time for a PR."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT last_polled_at FROM pr_poll_times
+            WHERE repo_owner = ? AND repo_name = ? AND pr_number = ?
+        """, (repo_owner, repo_name, pr_number))
+        row = cursor.fetchone()
+        if row:
+            return self._deserialize_datetime(row["last_polled_at"])
+        return None
+    
+    def update_last_poll_time(
+        self,
+        repo_owner: str,
+        repo_name: str,
+        pr_number: int,
+        poll_time: datetime,
+    ) -> None:
+        """Update the last poll time for a PR."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO pr_poll_times
+            (repo_owner, repo_name, pr_number, last_polled_at)
+            VALUES (?, ?, ?, ?)
+        """, (
+            repo_owner,
+            repo_name,
+            pr_number,
+            self._serialize_datetime(poll_time),
+        ))
+        self.conn.commit()
+    
+    def cleanup_old_processed_comments(self, retention_seconds: int) -> None:
+        """Clean up old processed comment records."""
+        from datetime import timedelta
+        cutoff_time = datetime.utcnow() - timedelta(seconds=retention_seconds)
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            DELETE FROM processed_comments
+            WHERE processed_at < ?
+        """, (self._serialize_datetime(cutoff_time),))
+        self.conn.commit()
 
