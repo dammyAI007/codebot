@@ -31,6 +31,22 @@
             font-size: 0.75rem;
             color: #6c757d;
         }
+        #repository-suggestions {
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+            background-color: white;
+        }
+        #repository-suggestions .list-group-item {
+            cursor: pointer;
+        }
+        #repository-suggestions .list-group-item:hover {
+            background-color: #f8f9fa;
+        }
+        #repository-suggestions .list-group-item.active {
+            background-color: #0d6efd;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -41,6 +57,9 @@
             </div>
             <div class="col-auto">
                 <div class="d-flex align-items-center gap-3">
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#submitTaskModal">
+                        New Task
+                    </button>
                     <div class="auto-refresh-indicator">
                         <span id="refresh-indicator">Auto-refresh: ON</span>
                     </div>
@@ -83,6 +102,54 @@
 
         <div class="mt-3">
             <small class="text-muted">Showing <span id="task-count">0</span> task(s)</small>
+        </div>
+    </div>
+
+    <!-- Task Submission Modal -->
+    <div class="modal fade" id="submitTaskModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Submit New Task</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="submit-task-form">
+                        <div class="mb-3" style="position: relative;">
+                            <label for="repository-url" class="form-label">Repository URL <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="repository-url" required autocomplete="off">
+                            <div id="repository-suggestions" class="list-group" style="position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto; display: none; width: 100%; margin-top: 2px;"></div>
+                            <div class="form-text">Start typing to search repositories or enter a full repository URL</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description <span class="text-danger">*</span></label>
+                            <textarea class="form-control" id="description" rows="6" required></textarea>
+                            <div class="form-text">Describe the task you want codebot to perform</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="ticket-id" class="form-label">Ticket ID</label>
+                            <input type="text" class="form-control" id="ticket-id">
+                        </div>
+                        <div class="mb-3">
+                            <label for="ticket-summary" class="form-label">Ticket Summary</label>
+                            <input type="text" class="form-control" id="ticket-summary">
+                        </div>
+                        <div class="mb-3">
+                            <label for="test-command" class="form-label">Test Command</label>
+                            <input type="text" class="form-control" id="test-command" placeholder="e.g., npm test">
+                        </div>
+                        <div class="mb-3">
+                            <label for="base-branch" class="form-label">Base Branch</label>
+                            <input type="text" class="form-control" id="base-branch" placeholder="e.g., main">
+                        </div>
+                        <div id="submit-task-error" class="alert alert-danger" style="display: none;"></div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="submit-task-btn">Submit Task</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -533,6 +600,214 @@
 
         loadTasks();
         startAutoRefresh();
+
+        // Repository autocomplete functionality
+        let repositoriesCache = [];
+        let repositoryRefreshInterval = null;
+        let selectedSuggestionIndex = -1;
+
+        async function loadRepositories() {
+            try {
+                const response = await fetch('/api/web/repositories');
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        window.location.reload();
+                        return;
+                    }
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                repositoriesCache = data.repositories || [];
+            } catch (error) {
+                console.error('Error loading repositories:', error);
+                repositoriesCache = [];
+            }
+        }
+
+        function startRepositoryRefresh() {
+            if (repositoryRefreshInterval) {
+                clearInterval(repositoryRefreshInterval);
+            }
+            loadRepositories();
+            repositoryRefreshInterval = setInterval(() => {
+                loadRepositories();
+            }, 5 * 60 * 1000);
+        }
+
+        function filterRepositories(query) {
+            if (!query || query.length === 0) {
+                return [];
+            }
+            const lowerQuery = query.toLowerCase();
+            return repositoriesCache.filter(repo => {
+                return repo.full_name.toLowerCase().includes(lowerQuery) ||
+                       repo.html_url.toLowerCase().includes(lowerQuery) ||
+                       repo.clone_url.toLowerCase().includes(lowerQuery);
+            }).slice(0, 10);
+        }
+
+        function showSuggestions(suggestions) {
+            const suggestionsDiv = document.getElementById('repository-suggestions');
+            const repoInput = document.getElementById('repository-url');
+            
+            if (suggestions.length === 0) {
+                suggestionsDiv.style.display = 'none';
+                return;
+            }
+
+            suggestionsDiv.innerHTML = suggestions.map((repo, index) => {
+                const escapedFullName = escapeHtml(repo.full_name);
+                const escapedUrl = escapeHtml(repo.clone_url);
+                return `
+                    <a href="#" class="list-group-item list-group-item-action" data-index="${index}" data-url="${escapeAttribute(repo.clone_url)}">
+                        <div><strong>${escapedFullName}</strong></div>
+                        <small class="text-muted">${escapedUrl}</small>
+                    </a>
+                `;
+            }).join('');
+
+            suggestionsDiv.style.display = 'block';
+
+            suggestionsDiv.querySelectorAll('.list-group-item').forEach((item, index) => {
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    repoInput.value = item.getAttribute('data-url');
+                    suggestionsDiv.style.display = 'none';
+                    selectedSuggestionIndex = -1;
+                });
+            });
+        }
+
+        const repoInput = document.getElementById('repository-url');
+        if (repoInput) {
+            repoInput.addEventListener('input', (e) => {
+                const query = e.target.value;
+                const suggestions = filterRepositories(query);
+                showSuggestions(suggestions);
+                selectedSuggestionIndex = -1;
+            });
+
+            repoInput.addEventListener('keydown', (e) => {
+                const suggestionsDiv = document.getElementById('repository-suggestions');
+                const items = suggestionsDiv.querySelectorAll('.list-group-item');
+                
+                if (items.length === 0) return;
+
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    selectedSuggestionIndex = Math.min(selectedSuggestionIndex + 1, items.length - 1);
+                    items.forEach((item, idx) => {
+                        item.classList.toggle('active', idx === selectedSuggestionIndex);
+                    });
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    selectedSuggestionIndex = Math.max(selectedSuggestionIndex - 1, -1);
+                    items.forEach((item, idx) => {
+                        item.classList.toggle('active', idx === selectedSuggestionIndex);
+                    });
+                } else if (e.key === 'Enter' && selectedSuggestionIndex >= 0) {
+                    e.preventDefault();
+                    items[selectedSuggestionIndex].click();
+                } else if (e.key === 'Escape') {
+                    suggestionsDiv.style.display = 'none';
+                    selectedSuggestionIndex = -1;
+                }
+            });
+
+            document.addEventListener('click', (e) => {
+                const suggestionsDiv = document.getElementById('repository-suggestions');
+                if (!repoInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+                    suggestionsDiv.style.display = 'none';
+                }
+            });
+        }
+
+        // Task submission functionality
+        const submitTaskBtn = document.getElementById('submit-task-btn');
+        const submitTaskForm = document.getElementById('submit-task-form');
+        const submitTaskError = document.getElementById('submit-task-error');
+        const submitTaskModal = new bootstrap.Modal(document.getElementById('submitTaskModal'));
+
+        function resetSubmitForm() {
+            submitTaskForm.reset();
+            submitTaskError.style.display = 'none';
+            document.getElementById('repository-suggestions').style.display = 'none';
+        }
+
+        document.getElementById('submitTaskModal').addEventListener('hidden.bs.modal', () => {
+            resetSubmitForm();
+        });
+
+        submitTaskBtn.addEventListener('click', async () => {
+            const repoUrl = document.getElementById('repository-url').value.trim();
+            const description = document.getElementById('description').value.trim();
+            const ticketId = document.getElementById('ticket-id').value.trim();
+            const ticketSummary = document.getElementById('ticket-summary').value.trim();
+            const testCommand = document.getElementById('test-command').value.trim();
+            const baseBranch = document.getElementById('base-branch').value.trim();
+
+            submitTaskError.style.display = 'none';
+
+            if (!repoUrl) {
+                submitTaskError.textContent = 'Repository URL is required';
+                submitTaskError.style.display = 'block';
+                return;
+            }
+
+            if (!description) {
+                submitTaskError.textContent = 'Description is required';
+                submitTaskError.style.display = 'block';
+                return;
+            }
+
+            submitTaskBtn.disabled = true;
+            submitTaskBtn.textContent = 'Submitting...';
+
+            try {
+                const payload = {
+                    repository_url: repoUrl,
+                    description: description
+                };
+
+                if (ticketId) payload.ticket_id = ticketId;
+                if (ticketSummary) payload.ticket_summary = ticketSummary;
+                if (testCommand) payload.test_command = testCommand;
+                if (baseBranch) payload.base_branch = baseBranch;
+
+                const response = await fetch('/api/web/tasks', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        window.location.reload();
+                        return;
+                    }
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || `HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                submitTaskModal.hide();
+                alert(`Task submitted successfully! Task ID: ${data.task_id}`);
+                loadTasks();
+            } catch (error) {
+                console.error('Error submitting task:', error);
+                submitTaskError.textContent = `Failed to submit task: ${error.message}`;
+                submitTaskError.style.display = 'block';
+            } finally {
+                submitTaskBtn.disabled = false;
+                submitTaskBtn.textContent = 'Submit Task';
+            }
+        });
+
+        loadRepositories();
+        startRepositoryRefresh();
     </script>
 </body>
 </html>

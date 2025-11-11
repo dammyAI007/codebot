@@ -3,11 +3,12 @@
 import uuid
 from datetime import datetime
 
+import requests
 from flask import Blueprint, render_template, jsonify, request, current_app
 
-from codebot.core.models import Task
+from codebot.core.models import Task, TaskPrompt
 from codebot.core.task_store import global_task_store
-from codebot.server.auth import require_basic_auth
+from codebot.server.auth import require_basic_auth, require_auth
 
 
 def create_web_ui_blueprint() -> Blueprint:
@@ -156,6 +157,145 @@ def create_web_ui_blueprint() -> Blueprint:
             "status": "pending",
             "message": "Task retry queued successfully"
         }), 202
+    
+    @web_ui.route("/api/web/repositories", methods=["GET"])
+    @require_basic_auth
+    def list_repositories():
+        """List repositories accessible to the GitHub App installation."""
+        github_app_auth = getattr(current_app, "github_app_auth", None)
+        
+        if not github_app_auth:
+            return jsonify({
+                "error": "Service Unavailable",
+                "message": "GitHub App authentication not configured"
+            }), 503
+        
+        try:
+            api_url = github_app_auth.api_url
+            headers = github_app_auth.get_auth_headers()
+            
+            url = f"{api_url}/installation/repositories"
+            repositories = []
+            page = 1
+            per_page = 100
+            
+            while True:
+                params = {"per_page": per_page, "page": page}
+                response = requests.get(url, headers=headers, params=params, timeout=10)
+                
+                if response.status_code != 200:
+                    if page == 1:
+                        return jsonify({
+                            "repositories": [],
+                            "error": f"GitHub API error: {response.status_code}"
+                        }), 200
+                    break
+                
+                data = response.json()
+                repos = data.get("repositories", [])
+                
+                if not repos:
+                    break
+                
+                for repo in repos:
+                    repositories.append({
+                        "full_name": repo.get("full_name", ""),
+                        "html_url": repo.get("html_url", ""),
+                        "clone_url": repo.get("clone_url", ""),
+                    })
+                
+                if len(repos) < per_page:
+                    break
+                
+                page += 1
+            
+            return jsonify({
+                "repositories": repositories,
+                "count": len(repositories)
+            }), 200
+            
+        except Exception as e:
+            return jsonify({
+                "repositories": [],
+                "error": str(e)
+            }), 200
+    
+    @web_ui.route("/api/web/tasks", methods=["POST"])
+    @require_auth
+    def submit_task():
+        """Submit a new task for execution."""
+        task_queue = getattr(current_app, "task_queue", None)
+        if not task_queue:
+            return jsonify({
+                "error": "Service Unavailable",
+                "message": "Task queue is not available. API may not be enabled."
+            }), 503
+        
+        try:
+            data = request.get_json()
+            
+            if not data:
+                return jsonify({
+                    "error": "Bad Request",
+                    "message": "Request body must be JSON"
+                }), 400
+            
+            if "repository_url" not in data:
+                return jsonify({
+                    "error": "Bad Request",
+                    "message": "repository_url is required"
+                }), 400
+            
+            if "description" not in data:
+                return jsonify({
+                    "error": "Bad Request",
+                    "message": "description is required"
+                }), 400
+            
+            try:
+                prompt = TaskPrompt(
+                    repository_url=data["repository_url"],
+                    description=data["description"],
+                    ticket_id=data.get("ticket_id"),
+                    ticket_summary=data.get("ticket_summary"),
+                    test_command=data.get("test_command"),
+                    base_branch=data.get("base_branch"),
+                )
+            except ValueError as e:
+                return jsonify({
+                    "error": "Bad Request",
+                    "message": str(e)
+                }), 400
+            
+            task_id = str(uuid.uuid4())
+            
+            task = Task(
+                id=task_id,
+                prompt=prompt,
+                status="pending",
+                submitted_at=datetime.utcnow(),
+                source="web",
+            )
+            
+            try:
+                task_queue.enqueue(task)
+            except Exception as e:
+                return jsonify({
+                    "error": "Internal Server Error",
+                    "message": f"Failed to enqueue task: {str(e)}"
+                }), 500
+            
+            return jsonify({
+                "task_id": task_id,
+                "status": "pending",
+                "message": "Task queued successfully"
+            }), 202
+        
+        except Exception as e:
+            return jsonify({
+                "error": "Internal Server Error",
+                "message": str(e)
+            }), 500
     
     return web_ui
 

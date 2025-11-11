@@ -200,7 +200,7 @@ def serve(
     bot_login = github_app_auth.get_bot_login()
     
     # Create Flask app
-    app = create_app(task_queue=task_queue, bot_login=bot_login, workspace_base_dir=work_base_dir)
+    app = create_app(task_queue=task_queue, bot_login=bot_login, workspace_base_dir=work_base_dir, github_app_auth=github_app_auth)
     
     # Start Flask server (blocking)
     try:

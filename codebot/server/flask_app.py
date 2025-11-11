@@ -1,18 +1,22 @@
 """Flask application setup and configuration."""
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from flask import Flask, jsonify
 
 from codebot.server.task_queue import TaskQueue
 from codebot.server.webhook import review_queue
 
+if TYPE_CHECKING:
+    from codebot.core.github_app import GitHubAppAuth
+
 
 def create_app(
     task_queue: Optional[TaskQueue] = None,
     bot_login: Optional[str] = None,
     workspace_base_dir: Optional[Path] = None,
+    github_app_auth: Optional["GitHubAppAuth"] = None,
 ) -> Flask:
     """
     Create and configure Flask application.
@@ -21,6 +25,7 @@ def create_app(
         task_queue: Optional task queue for API endpoints
         bot_login: Optional bot login name for comment detection (e.g., "codebot-007[bot]")
         workspace_base_dir: Optional base directory for workspaces (for cleanup)
+        github_app_auth: Optional GitHub App auth instance
         
     Returns:
         Configured Flask app
@@ -42,6 +47,10 @@ def create_app(
     # Store workspace base directory for cleanup handlers
     if workspace_base_dir:
         app.config['CODEBOT_WORKSPACE_BASE_DIR'] = str(workspace_base_dir)
+    
+    # Store GitHub App auth for repository endpoints
+    if github_app_auth:
+        app.github_app_auth = github_app_auth
     
     # Register webhook handlers
     from codebot.server import webhook

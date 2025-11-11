@@ -71,6 +71,52 @@ def require_basic_auth(f):
     return decorated_function
 
 
+def require_auth(f):
+    """
+    Decorator to require either API key OR basic auth authentication.
+    
+    Checks API key first, then falls back to basic auth.
+    Allows same endpoint to work for both web UI and API clients.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # First check for API key
+        api_key = None
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            api_key = auth_header[7:]
+        
+        if not api_key:
+            api_key = request.headers.get("X-API-Key")
+        
+        if api_key and config.is_api_key_valid(api_key):
+            return f(*args, **kwargs)
+        
+        # Fall back to basic auth
+        if not config.has_web_auth():
+            return jsonify({
+                "error": "Unauthorized",
+                "message": "Authentication required"
+            }), 401
+        
+        if not auth_header or not auth_header.startswith("Basic "):
+            return _make_auth_response()
+        
+        try:
+            encoded = auth_header[6:]
+            decoded = base64.b64decode(encoded).decode("utf-8")
+            username, password = decoded.split(":", 1)
+            
+            if not config.is_web_auth_valid(username, password):
+                return _make_auth_response()
+        except Exception:
+            return _make_auth_response()
+        
+        return f(*args, **kwargs)
+    
+    return decorated_function
+
+
 def _make_auth_response() -> Response:
     """Create HTTP 401 response with Basic Auth challenge."""
     response = Response(
