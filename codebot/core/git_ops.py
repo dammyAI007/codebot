@@ -325,4 +325,97 @@ class GitOps:
             print(f"Warning: Failed to clean commit message: {result.stderr}")
         else:
             print("Cleaned commit message (removed Co-Authored-By trailers and unwanted text)")
+    
+    def _is_authenticated_url(self, url: str) -> bool:
+        """Check if URL contains authentication token."""
+        return "oauth2:" in url or "@" in url and "token" in url
+    
+    def fetch_from_remote(self) -> bool:
+        """
+        Fetch latest changes from remote with proper authentication.
+        
+        Returns:
+            True if fetch was successful, False otherwise
+        """
+        print("Fetching latest changes from remote...")
+        
+        # Store original URL for restoration later
+        original_url = None
+        
+        # Ensure authenticated URL is set before fetch
+        if self.github_app_auth:
+            original_url = self._get_remote_url()
+            if original_url and not self._is_authenticated_url(original_url):
+                auth_url = self._create_authenticated_url(original_url)
+                print("Setting up authenticated remote URL for fetch...")
+                self._set_remote_url(auth_url)
+        
+        try:
+            env = self._get_git_env()
+            result = subprocess.run(
+                ["git", "fetch", "origin"],
+                cwd=self.work_dir,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            
+            if result.returncode != 0:
+                print(f"Warning: Failed to fetch from remote: {result.stderr.strip()}")
+                return False
+            
+            print("Successfully fetched from remote")
+            return True
+            
+        finally:
+            # Always restore clean URL for security
+            if self.github_app_auth and original_url:
+                print("Restoring clean remote URL...")
+                self._set_remote_url(original_url)
+    
+    def pull_latest_changes(self, branch_name: str) -> bool:
+        """
+        Pull latest changes from the specified branch with proper authentication.
+        
+        Args:
+            branch_name: Name of the branch to pull from
+            
+        Returns:
+            True if pull was successful, False otherwise
+        """
+        print(f"Pulling latest changes from branch: {branch_name}")
+        
+        # Store original URL for restoration later
+        original_url = None
+        
+        # Ensure authenticated URL is set before pull
+        if self.github_app_auth:
+            original_url = self._get_remote_url()
+            if original_url and not self._is_authenticated_url(original_url):
+                auth_url = self._create_authenticated_url(original_url)
+                print("Setting up authenticated remote URL for pull...")
+                self._set_remote_url(auth_url)
+        
+        try:
+            env = self._get_git_env()
+            result = subprocess.run(
+                ["git", "pull", "origin", branch_name],
+                cwd=self.work_dir,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            
+            if result.returncode != 0:
+                print(f"Warning: Failed to pull latest changes: {result.stderr.strip()}")
+                return False
+            
+            print("Successfully pulled latest changes")
+            return True
+            
+        finally:
+            # Always restore clean URL for security
+            if self.github_app_auth and original_url:
+                print("Restoring clean remote URL...")
+                self._set_remote_url(original_url)
 

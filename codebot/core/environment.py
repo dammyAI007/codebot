@@ -109,6 +109,17 @@ class EnvironmentManager:
         if not self.work_dir:
             return
         
+        # Store original URL for restoration later
+        original_url = None
+        
+        # Ensure authenticated URL is set before any git operations
+        if self.github_app_auth:
+            original_url = self._get_remote_url()
+            if original_url and not self._is_authenticated_url(original_url):
+                auth_url = self._create_authenticated_url(original_url)
+                print("Setting up authenticated remote URL for git operations...")
+                self._set_remote_url(auth_url)
+        
         env = get_git_env()
         
         # Fetch latest from remote
@@ -123,6 +134,11 @@ class EnvironmentManager:
         
         if result.returncode != 0:
             print(f"Warning: Failed to fetch from remote: {result.stderr}")
+            # If fetch fails due to auth, try to restore clean URL and return
+            if self.github_app_auth and original_url:
+                print("Restoring original remote URL after failed fetch...")
+                self._set_remote_url(original_url)
+            return
         
         # Checkout the branch
         print(f"Checking out branch: {self.branch_name}")
@@ -135,6 +151,9 @@ class EnvironmentManager:
         )
         
         if result.returncode != 0:
+            # Restore clean URL before raising error
+            if self.github_app_auth and original_url:
+                self._set_remote_url(original_url)
             raise RuntimeError(f"Failed to checkout branch: {result.stderr}")
         
         # Pull latest changes
@@ -150,7 +169,51 @@ class EnvironmentManager:
         if result.returncode != 0:
             print(f"Warning: Failed to pull latest changes: {result.stderr}")
         
+        # Restore clean URL for security (remove token from remote config)
+        if self.github_app_auth and original_url:
+            print("Restoring clean remote URL...")
+            self._set_remote_url(original_url)
+        
         print("Workspace updated successfully")
+    
+    def _is_authenticated_url(self, url: str) -> bool:
+        """Check if URL contains authentication token."""
+        return "oauth2:" in url or "@" in url and "token" in url
+    
+    def _get_remote_url(self) -> Optional[str]:
+        """Get the current remote origin URL."""
+        if not self.work_dir:
+            return None
+            
+        env = get_git_env()
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=self.work_dir,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        
+        if result.returncode == 0:
+            return result.stdout.strip()
+        return None
+    
+    def _set_remote_url(self, url: str) -> None:
+        """Set the remote origin URL."""
+        if not self.work_dir:
+            return
+            
+        env = get_git_env()
+        result = subprocess.run(
+            ["git", "remote", "set-url", "origin", url],
+            cwd=self.work_dir,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        
+        if result.returncode != 0:
+            raise RuntimeError(f"Failed to set remote URL: {result.stderr}")
     
     def _create_authenticated_url(self, repo_url: str) -> str:
         """
