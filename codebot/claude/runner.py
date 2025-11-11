@@ -117,11 +117,15 @@ class ClaudeRunner:
         print(f"Task: {description}")
         print("=" * 80)
         
+        # Get git environment with proper author/committer info
+        git_env = self._get_git_env()
+        
         result = subprocess.run(
             cmd,
             cwd=self.work_dir,
             capture_output=True,
             text=True,
+            env=git_env,
         )
         
         print(result.stdout)
@@ -144,8 +148,10 @@ class ClaudeRunner:
             else:
                 return
         
-        author_info = get_codebot_git_author_info(bot_user_id)
-        env = get_git_env(bot_user_id=bot_user_id)
+        bot_name = self.github_app_auth.get_bot_login()
+        api_url = self.github_app_auth.api_url
+        author_info = get_codebot_git_author_info(bot_user_id, bot_name, api_url)
+        env = get_git_env(bot_user_id=bot_user_id, bot_name=bot_name, api_url=api_url)
         
         # Set git config user.name
         result = subprocess.run(
@@ -172,6 +178,20 @@ class ClaudeRunner:
             print(f"Warning: Failed to set git user.email: {result.stderr}")
         else:
             print(f"Configured git author for Claude Code CLI: {author_info['author_name']} <{author_info['author_email']}>")
+    
+    def _get_git_env(self) -> dict:
+        """Get git environment variables for non-interactive operation."""
+        bot_user_id = None
+        bot_name = None
+        api_url = None
+        if self.github_app_auth:
+            bot_user_id = self.github_app_auth.bot_user_id
+            bot_name = self.github_app_auth.get_bot_login()
+            api_url = self.github_app_auth.api_url
+            # Fallback to app_id if bot_user_id is not available
+            if not bot_user_id:
+                bot_user_id = self.github_app_auth.app_id
+        return get_git_env(bot_user_id=bot_user_id, bot_name=bot_name, api_url=api_url)
     
     def verify_changes_committed(self) -> bool:
         """

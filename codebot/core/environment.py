@@ -350,8 +350,10 @@ class EnvironmentManager:
             else:
                 return
         
-        author_info = get_codebot_git_author_info(bot_user_id)
-        env = get_git_env()
+        bot_name = self.github_app_auth.get_bot_login()
+        api_url = self.github_app_auth.api_url
+        author_info = get_codebot_git_author_info(bot_user_id, bot_name, api_url)
+        env = get_git_env(bot_user_id=bot_user_id, bot_name=bot_name, api_url=api_url)
         
         # Set git config user.name
         result = subprocess.run(

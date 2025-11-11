@@ -166,18 +166,48 @@ def is_github_url(url: str) -> bool:
         return False
 
 
-def get_codebot_git_author_info(bot_user_id: str) -> Dict[str, str]:
+def get_codebot_git_author_info(bot_user_id: str, bot_name: Optional[str] = None, api_url: Optional[str] = None) -> Dict[str, str]:
     """
     Get git author and committer information for codebot.
     
     Args:
         bot_user_id: GitHub App bot user ID (not app ID)
+        bot_name: Bot name (required, must be set via GITHUB_BOT_NAME env var)
+        api_url: GitHub API URL to determine the correct email domain
         
     Returns:
         Dictionary with author name, author email, committer name, and committer email
+        
+    Raises:
+        ValueError: If bot_name is not provided
     """
-    author_name = "codebot-007[bot]"
-    author_email = f"{bot_user_id}+codebot-007[bot]@users.noreply.github.com"
+    if not bot_name:
+        raise ValueError("Bot name is required. Please set GITHUB_BOT_NAME environment variable.")
+    
+    # Determine the correct email domain based on GitHub instance
+    if api_url:
+        # Extract domain from API URL
+        parsed = urlparse(api_url)
+        if parsed.netloc == "api.github.com":
+            # GitHub.com
+            email_domain = "users.noreply.github.com"
+        else:
+            # GitHub Enterprise - use the enterprise domain
+            enterprise_domain = parsed.netloc
+            if enterprise_domain.startswith("api."):
+                # Remove 'api.' prefix if present
+                enterprise_domain = enterprise_domain[4:]
+            elif "/api/v3" in api_url:
+                # Extract base domain from URL like https://github.enterprise.com/api/v3
+                base_url = api_url.replace("/api/v3", "")
+                enterprise_domain = urlparse(base_url).netloc
+            email_domain = f"users.noreply.{enterprise_domain}"
+    else:
+        # Fallback to github.com if no API URL provided
+        email_domain = "users.noreply.github.com"
+    
+    author_name = bot_name
+    author_email = f"{bot_user_id}+{bot_name}@{email_domain}"
     
     return {
         "author_name": author_name,
@@ -187,12 +217,14 @@ def get_codebot_git_author_info(bot_user_id: str) -> Dict[str, str]:
     }
 
 
-def get_git_env(bot_user_id: Optional[str] = None) -> Dict[str, str]:
+def get_git_env(bot_user_id: Optional[str] = None, bot_name: Optional[str] = None, api_url: Optional[str] = None) -> Dict[str, str]:
     """
     Get git environment variables for non-interactive operation.
     
     Args:
         bot_user_id: Optional GitHub App bot user ID to set git author/committer information
+        bot_name: Bot name (required when bot_user_id is provided, must be set via GITHUB_BOT_NAME env var)
+        api_url: GitHub API URL to determine the correct email domain
     
     Returns:
         Dictionary of environment variables for git operations
@@ -205,7 +237,7 @@ def get_git_env(bot_user_id: Optional[str] = None) -> Dict[str, str]:
     
     # If bot_user_id is provided, set git author/committer information
     if bot_user_id:
-        author_info = get_codebot_git_author_info(bot_user_id)
+        author_info = get_codebot_git_author_info(bot_user_id, bot_name, api_url)
         env["GIT_AUTHOR_NAME"] = author_info["author_name"]
         env["GIT_AUTHOR_EMAIL"] = author_info["author_email"]
         env["GIT_COMMITTER_NAME"] = author_info["committer_name"]

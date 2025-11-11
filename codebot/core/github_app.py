@@ -109,6 +109,13 @@ class GitHubAppAuth:
         # Store API URL
         self.api_url = api_url or detect_github_api_url()
         
+        # Get bot name from environment variable (required)
+        self.bot_name = os.getenv("GITHUB_BOT_NAME")
+        if not self.bot_name:
+            raise RuntimeError(
+                "GitHub Bot name not found. Please set GITHUB_BOT_NAME environment variable or add it to a .env file."
+            )
+        
         # Token cache
         self._installation_token: Optional[str] = None
         self._token_expires_at: float = 0
@@ -218,7 +225,7 @@ class GitHubAppAuth:
         token = self.get_installation_token()
         
         # Make API call to get bot user info
-        url = f"{self.api_url}/users/codebot-007[bot]"
+        url = f"{self.api_url}/users/{self.bot_name}"
         headers = {
             "Authorization": f"token {token}",
             "Accept": "application/vnd.github.v3+json",
@@ -272,12 +279,10 @@ class GitHubAppAuth:
         Get the GitHub App bot user login name.
 
         The bot login follows the format: {app_name}[bot]
-        For codebot-007, this would be "codebot-007[bot]"
+        Retrieved from GITHUB_BOT_NAME environment variable.
 
         Returns:
             Bot login name as string
         """
-        # The bot login is based on the app name, which is hardcoded as "codebot-007"
-        # This matches the app registration name
-        return "codebot-007[bot]"
+        return self.bot_name
 
