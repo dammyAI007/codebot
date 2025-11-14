@@ -1,5 +1,7 @@
 """Process PR review comments from the queue."""
 
+import json
+import subprocess
 import time
 import uuid
 from datetime import datetime
@@ -41,27 +43,21 @@ class ReviewProcessor:
         self.running = False
     
     def start(self):
-        """Start processing review comments from the queue."""
         self.running = True
         print("Review processor started")
         
         while self.running:
             try:
-                # Get next comment from queue (wait up to 5 seconds)
                 comment_data = self.review_queue.get(timeout=5)
                 
                 print(f"\n{'=' * 80}")
                 print(f"Processing review comment for PR #{comment_data['pr_number']}")
                 print(f"{'=' * 80}\n")
                 
-                # Process the comment
                 self.process_comment(comment_data)
-                
-                # Mark task as done
                 self.review_queue.task_done()
                 
             except Empty:
-                # No items in queue, continue waiting
                 continue
             except KeyboardInterrupt:
                 print("\nStopping review processor...")
@@ -69,11 +65,9 @@ class ReviewProcessor:
                 break
             except Exception as e:
                 print(f"ERROR: Failed to process review comment: {e}")
-                # Continue processing other comments
                 continue
     
     def stop(self):
-        """Stop the review processor."""
         self.running = False
     
     def process_comment(self, comment_data: dict):
@@ -83,7 +77,6 @@ class ReviewProcessor:
         Args:
             comment_data: Dictionary with comment information
         """
-        # Extract data
         pr_number = comment_data["pr_number"]
         branch_name = comment_data.get("branch_name")
         repo_url = comment_data["repo_url"]
@@ -92,7 +85,6 @@ class ReviewProcessor:
         comment_body = comment_data["comment_body"]
         comment_id = comment_data["comment_id"]
         
-        # If branch_name is None (issue_comment), fetch it from PR details
         if not branch_name:
             print("Fetching branch name from PR details...")
             try:
@@ -108,7 +100,6 @@ class ReviewProcessor:
         print(f"Branch: {branch_name}")
         print(f"Comment: {comment_body[:100]}...")
         
-        # Find parent task
         parent_task = None
         uuid_from_branch = extract_uuid_from_branch(branch_name)
         
@@ -131,7 +122,6 @@ class ReviewProcessor:
         else:
             print("Warning: Could not find parent task. Review task will be created standalone.")
         
-        # Derive workspace from branch name
         workspace_path = self._get_or_create_workspace(
             branch_name,
             repo_url,
@@ -144,16 +134,13 @@ class ReviewProcessor:
         
         print(f"Workspace: {workspace_path}")
         
-        # Get PR context
         pr_context = self._get_pr_context(repo_owner, repo_name, pr_number)
         
-        # Add inline comment context if available
         if comment_data.get("comment_path"):
             pr_context["comment_file"] = comment_data.get("comment_path")
             pr_context["comment_line"] = comment_data.get("comment_line")
             pr_context["comment_diff_hunk"] = comment_data.get("comment_diff_hunk", "")
         
-        # Get comment thread if this is a reply
         if comment_data.get("in_reply_to_id") or comment_data.get("type") == "review_comment":
             print("Fetching comment thread...")
             thread = self.github_pr.get_comment_thread(repo_owner, repo_name, pr_number, comment_id)
@@ -211,7 +198,6 @@ class ReviewProcessor:
         
         if classification_type == "nitpick":
             print("Classification: NITPICK - Analyzing and responding")
-            # Use Claude to analyze the nitpick and generate response
             nitpick_result = self._handle_nitpick(comment_body, pr_context)
             reply_body = nitpick_result["response"]
             self._post_reply(
@@ -231,7 +217,6 @@ class ReviewProcessor:
         else:
             print("Classification: QUERY")
         
-        # Run Claude Code to handle the comment
         print("\nRunning Claude Code...")
         review_runner = ReviewRunner(workspace_path, github_app_auth=self.github_app_auth)
         
@@ -268,12 +253,10 @@ class ReviewProcessor:
             )
             return
         
-        # Check if changes were made
         git_ops = GitOps(workspace_path, github_app_auth=self.github_app_auth)
         
         if is_change_request:
             try:
-                # Remove Co-Authored-By trailers from commits before pushing
                 print("\nCleaning commit trailers...")
                 git_ops.remove_co_author_trailers()
                 
@@ -371,9 +354,6 @@ class ReviewProcessor:
             - "response": The response text to post
             - "agrees": Boolean indicating if Claude agrees with the nitpick
         """
-        import subprocess
-        import json
-        
         # Build context for the analysis
         context_parts = [
             "You received a nitpick comment on your code review.",
@@ -409,7 +389,6 @@ class ReviewProcessor:
         context_parts.append(comment_body)
         context_parts.append("")
         
-        # First, analyze the nitpick to determine if we agree
         analysis_prompt = "\n".join(context_parts) + """
 
 Analyze this nitpick and determine if you agree with it or not. Consider:
@@ -447,7 +426,6 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
                     agrees = analysis.get("agrees", False)
                     reasoning = analysis.get("reasoning", "")
             
-            # Generate response based on whether we agree
             if agrees:
                 response = (
                     f"I agree with this suggestion! {reasoning}\n\n"
@@ -538,7 +516,6 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
             if workspace_path and workspace_path.exists():
                 print(f"Found existing workspace: {workspace_path}")
                 
-                # Reuse and update workspace
                 task = TaskPrompt(
                     description=f"Review comment on PR #{pr_number}",
                     repository_url=repo_url,
@@ -561,7 +538,6 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
                     print(f"Warning: Failed to reuse workspace: {e}")
                     print("Will create a new workspace instead")
         
-        # If no existing workspace, create a new one
         print("Creating new workspace...")
         task = TaskPrompt(
             description=f"Review comment on PR #{pr_number}",
@@ -575,7 +551,6 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
         )
         
         try:
-            # Create workspace directory
             dir_name = f"task_{uuid}" if uuid else f"task_{pr_number}"
             workspace_path = self.workspace_base_dir / dir_name
             workspace_path.mkdir(parents=True, exist_ok=True)
@@ -583,10 +558,7 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
             env_manager.work_dir = workspace_path
             print(f"Created work directory: {workspace_path}")
             
-            # Clone repository
             env_manager._clone_repository()
-            
-            # Checkout the PR branch
             env_manager.branch_name = branch_name
             env_manager._checkout_branch(branch_name)
             
@@ -638,9 +610,6 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
             - type: "query", "change_request", or "ambiguous"
             - clarification_question: Question to ask if ambiguous (optional)
         """
-        import subprocess
-        import json
-        
         # Build context with code snippet if available
         context_parts = [
             "You are analyzing a code review comment to determine its intent.",
@@ -755,14 +724,10 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
         Update PR description by comparing current description with all commits in the PR.
         """
         try:
-            import subprocess
-            import json
-            
             pr_details = self.github_pr.get_pr_details(owner, repo, pr_number)
             pr_title = pr_details.get("title", "")
             original_body = pr_details.get("body", "")
             
-            # Extract task description from current PR
             task_description = ""
             if "## 📋 Task Description" in original_body:
                 start = original_body.find("## 📋 Task Description")
@@ -773,7 +738,6 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
                     task_section = original_body[start:end].strip()
                     task_description = task_section.replace("## 📋 Task Description\n\n", "").replace("## 📋 Task Description", "").strip()
             
-            # Extract current changes made section
             current_changes_made = ""
             if "## 🔨 Changes Made" in original_body:
                 start = original_body.find("## 🔨 Changes Made")
@@ -783,7 +747,6 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
                 changes_section = original_body[start:end].strip()
                 current_changes_made = changes_section.replace("## 🔨 Changes Made\n\n", "").replace("## 🔨 Changes Made", "").strip()
             
-            # Get base branch (usually main or master)
             result = subprocess.run(
                 ["git", "rev-parse", "--abbrev-ref", "HEAD"],
                 cwd=workspace_path,
@@ -792,7 +755,6 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
             )
             current_branch = result.stdout.strip() if result.returncode == 0 else "HEAD"
             
-            # Try to find base branch
             base_branch = None
             for branch in ["main", "master", "develop"]:
                 result = subprocess.run(
@@ -809,7 +771,6 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
                 print("Warning: Could not determine base branch, using origin/main")
                 base_branch = "main"
             
-            # Get all commits in the PR
             result = subprocess.run(
                 ["git", "log", f"origin/{base_branch}..HEAD", "--pretty=format:%H|%s|%b", "--reverse"],
                 cwd=workspace_path,
@@ -831,7 +792,6 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
                             "body": commit_body.strip()
                         })
             
-            # Get files changed
             result = subprocess.run(
                 ["git", "diff", "--name-only", f"origin/{base_branch}...HEAD"],
                 cwd=workspace_path,
@@ -840,7 +800,6 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
             )
             files_changed = [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
             
-            # Get full diff
             result = subprocess.run(
                 ["git", "diff", f"origin/{base_branch}...HEAD"],
                 cwd=workspace_path,
@@ -852,7 +811,6 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
             if len(full_diff) > 12000:
                 full_diff = full_diff[:12000] + "\n\n... (diff truncated for brevity)"
             
-            # Format commits for prompt
             commits_text = ""
             if commits_info:
                 commits_text = "\n".join([
@@ -927,7 +885,6 @@ Format example:
             if result.returncode == 0 and result.stdout.strip():
                 new_body = result.stdout.strip()
                 
-                # Clean unwanted lines from Claude's response
                 cleaned_body = self._clean_pr_description(new_body)
                 
                 if "## 📋 Task Description" in cleaned_body:
@@ -955,19 +912,14 @@ Format example:
         cleaned_lines = []
 
         for line in lines:
-            # Skip lines that match unwanted patterns
             stripped = line.strip()
-            # Remove "🤖 Generated with Claude Code" (exact match or contains)
             if stripped == "🤖 Generated with Claude Code" or "🤖 Generated with Claude Code" in stripped:
                 continue
-            # Remove Co-Authored-By trailers
             if stripped.startswith("Co-Authored-By:"):
                 continue
             cleaned_lines.append(line)
 
-        # Join and clean up any double newlines that might result
         cleaned = "\n".join(cleaned_lines).strip()
-        # Remove any trailing empty lines
         while cleaned.endswith("\n\n"):
             cleaned = cleaned[:-1]
 

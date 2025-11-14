@@ -26,15 +26,11 @@ class GitHubPR:
         
         self.github_app_auth = github_app_auth
         
-        # Store API URL for later use - will be set per repository if not provided
         self.default_api_url = api_url or detect_github_api_url()
-        
-        # Cache for repository-specific API URLs
         self._repo_api_cache = {}
     
     @property
     def headers(self) -> dict:
-        """Get authentication headers for GitHub API requests."""
         return self.github_app_auth.get_auth_headers()
     
     def _get_api_url(self, repository_url: str) -> str:
@@ -51,7 +47,6 @@ class GitHubPR:
             github_info = detect_github_info(repository_url)
             return github_info["api_url"]
         except Exception:
-            # Fallback to default API URL
             return self.default_api_url
     
     def _build_api_url(self, repository_url: str, endpoint: str) -> str:
@@ -80,12 +75,10 @@ class GitHubPR:
         Returns:
             Full API URL
         """
-        # Check if we have a cached API URL for this repository
         repo_key = f"{owner}/{repo}"
         if repo_key in self._repo_api_cache:
             api_url = self._repo_api_cache[repo_key]
         else:
-            # Use default API URL
             api_url = self.default_api_url
         
         return f"{api_url}/{endpoint.lstrip('/')}"
@@ -100,25 +93,20 @@ class GitHubPR:
         Returns:
             Tuple of (owner, repo)
         """
-        # Parse the URL
         parsed = urlparse(repository_url)
         
         if parsed.scheme in ["http", "https"]:
-            # HTTPS URL: https://github.com/owner/repo.git
             path = parsed.path.strip("/")
         elif parsed.scheme == "" or "git@" in repository_url:
-            # SSH URL or path: git@github.com:owner/repo.git or owner/repo
             path = parsed.path
             if path.startswith(":"):
                 path = path[1:]
         else:
             raise ValueError(f"Unsupported repository URL format: {repository_url}")
         
-        # Remove .git suffix if present
         if path.endswith(".git"):
             path = path[:-4]
         
-        # Split into owner and repo
         parts = path.split("/")
         if len(parts) >= 2:
             return parts[-2], parts[-1]
@@ -148,7 +136,6 @@ class GitHubPR:
         """
         owner, repo = self.extract_repo_info(repository_url)
         
-        # Cache the API URL for this repository for future method calls
         repo_key = f"{owner}/{repo}"
         api_url = self._get_api_url(repository_url)
         self._repo_api_cache[repo_key] = api_url
@@ -173,7 +160,6 @@ class GitHubPR:
             error_data = response.json()
             error_msg = error_data.get("message", "Unknown error")
             
-            # Show detailed validation errors if available
             if "errors" in error_data:
                 error_details = "\n".join([f"  - {err.get('message', err)}" for err in error_data["errors"]])
                 raise RuntimeError(
@@ -208,9 +194,7 @@ class GitHubPR:
         if task.ticket_summary:
             return task.ticket_summary
         
-        # Use first line of description as title
         first_line = task.description.split("\n")[0]
-        # Truncate if too long
         if len(first_line) > 100:
             first_line = first_line[:97] + "..."
         
@@ -230,19 +214,14 @@ class GitHubPR:
         cleaned_lines = []
         
         for line in lines:
-            # Skip lines that match unwanted patterns
             stripped = line.strip()
-            # Remove "🤖 Generated with Claude Code" (exact match or contains)
             if stripped == "🤖 Generated with Claude Code" or "🤖 Generated with Claude Code" in stripped:
                 continue
-            # Remove Co-Authored-By trailers
             if stripped.startswith("Co-Authored-By:"):
                 continue
             cleaned_lines.append(line)
         
-        # Join and clean up any double newlines that might result
         cleaned = "\n".join(cleaned_lines).strip()
-        # Remove any trailing empty lines
         while cleaned.endswith("\n\n"):
             cleaned = cleaned[:-1]
         
@@ -267,21 +246,17 @@ class GitHubPR:
         """
         body_parts = []
         
-        # Add ticket ID if available
         if task.ticket_id:
             body_parts.append(f"**Ticket ID:** {task.ticket_id}")
             body_parts.append("")
         
-        # Add task description (clean it first)
         cleaned_task_description = self._clean_commit_message(task.description)
         body_parts.append("## 📋 Task Description")
         body_parts.append("")
         body_parts.append(cleaned_task_description)
         body_parts.append("")
         
-        # Add commit message if available
         if commit_message:
-            # Clean commit message: remove unwanted lines
             cleaned_message = self._clean_commit_message(commit_message)
             if cleaned_message.strip():
                 body_parts.append("## 🔨 Changes Made")
@@ -289,7 +264,6 @@ class GitHubPR:
                 body_parts.append(cleaned_message)
                 body_parts.append("")
         
-        # Add files changed if available
         if files_changed:
             body_parts.append("## 📁 Files Changed")
             body_parts.append("")
@@ -298,11 +272,9 @@ class GitHubPR:
             body_parts.append("```")
             body_parts.append("")
         
-        # Add footer
         body_parts.append("---")
         body_parts.append("*This PR was automatically generated by [codebot](https://github.com/ajibigad/codebot) 🤖*")
         
-        # Clean the entire PR body to remove any unwanted text that might have slipped through
         full_body = "\n".join(body_parts)
         return self._clean_commit_message(full_body)
     
@@ -416,7 +388,6 @@ class GitHubPR:
         Returns:
             Updated PR data from GitHub API
         """
-        # Clean the body to remove any unwanted text
         cleaned_body = self._clean_commit_message(body)
         
         url = self._build_api_url_from_owner_repo(owner, repo, f"repos/{owner}/{repo}/pulls/{pr_number}")

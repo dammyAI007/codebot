@@ -2,7 +2,7 @@
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 
@@ -85,19 +85,16 @@ class SQLiteTaskStorage(TaskStorage):
         self.conn.commit()
     
     def _serialize_datetime(self, dt: Optional[datetime]) -> Optional[str]:
-        """Serialize datetime to ISO format string."""
         if dt is None:
             return None
         return dt.isoformat()
     
     def _deserialize_datetime(self, dt_str: Optional[str]) -> Optional[datetime]:
-        """Deserialize ISO format string to datetime."""
         if dt_str is None:
             return None
         return datetime.fromisoformat(dt_str)
     
     def _serialize_prompt(self, prompt: TaskPrompt) -> str:
-        """Serialize TaskPrompt to JSON."""
         return json.dumps({
             "repository_url": prompt.repository_url,
             "description": prompt.description,
@@ -108,7 +105,6 @@ class SQLiteTaskStorage(TaskStorage):
         })
     
     def _deserialize_prompt(self, prompt_json: str) -> TaskPrompt:
-        """Deserialize JSON to TaskPrompt."""
         data = json.loads(prompt_json)
         return TaskPrompt(**data)
     
@@ -406,7 +402,6 @@ class SQLiteTaskStorage(TaskStorage):
     
     def cleanup_old_processed_comments(self, retention_seconds: int) -> None:
         """Clean up old processed comment records."""
-        from datetime import timedelta
         cutoff_time = datetime.utcnow() - timedelta(seconds=retention_seconds)
         cursor = self.conn.cursor()
         cursor.execute("""

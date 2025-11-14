@@ -53,7 +53,6 @@ class ClaudeRunner:
         Returns:
             CompletedProcess with the command result
         """
-        # Build the system prompt with comprehensive instructions
         system_prompt = (
             "You are a senior engineer that has been tasked to work on this task. You should do the following:\n\n"
             "1. **Read and understand the task description**\n"
@@ -97,27 +96,23 @@ class ClaudeRunner:
         if append_system_prompt:
             system_prompt += f"\n\nAdditional instructions:\n{append_system_prompt}"
         
-        # Build the full prompt
         full_prompt = f"Task: {description}"
         
-        # Prepare command
         cmd = [
             "claude",
             "-p", full_prompt,
             "--append-system-prompt", system_prompt,
             "--output-format", "stream-json",
             "--verbose",
-            "--dangerously-skip-permissions",  # Skip permission prompts for non-interactive mode
+            "--dangerously-skip-permissions",
         ]
         
-        # Configure git author before running Claude Code CLI
         self._configure_git_author()
         
         print(f"Running Claude Code CLI in headless mode...")
         print(f"Task: {description}")
         print("=" * 80)
         
-        # Get git environment with proper author/committer info
         git_env = self._get_git_env()
         
         result = subprocess.run(
@@ -137,10 +132,8 @@ class ClaudeRunner:
         if not self.github_app_auth or not self.work_dir:
             return
         
-        # Try to get bot user ID, fallback to app_id with warning
         bot_user_id = self.github_app_auth.bot_user_id
         if not bot_user_id:
-            # Fallback to app_id if bot_user_id retrieval failed
             app_id = self.github_app_auth.app_id
             if app_id:
                 print(f"Warning: Could not retrieve bot user ID, using app ID as fallback: {app_id}")
@@ -153,7 +146,6 @@ class ClaudeRunner:
         author_info = get_codebot_git_author_info(bot_user_id, bot_name, api_url)
         env = get_git_env(bot_user_id=bot_user_id, bot_name=bot_name, api_url=api_url)
         
-        # Set git config user.name
         result = subprocess.run(
             ["git", "config", "user.name", author_info["author_name"]],
             cwd=self.work_dir,
@@ -165,7 +157,6 @@ class ClaudeRunner:
         if result.returncode != 0:
             print(f"Warning: Failed to set git user.name: {result.stderr}")
         
-        # Set git config user.email
         result = subprocess.run(
             ["git", "config", "user.email", author_info["author_email"]],
             cwd=self.work_dir,
@@ -180,7 +171,6 @@ class ClaudeRunner:
             print(f"Configured git author for Claude Code CLI: {author_info['author_name']} <{author_info['author_email']}>")
     
     def _get_git_env(self) -> dict:
-        """Get git environment variables for non-interactive operation."""
         bot_user_id = None
         bot_name = None
         api_url = None
@@ -188,18 +178,11 @@ class ClaudeRunner:
             bot_user_id = self.github_app_auth.bot_user_id
             bot_name = self.github_app_auth.get_bot_login()
             api_url = self.github_app_auth.api_url
-            # Fallback to app_id if bot_user_id is not available
             if not bot_user_id:
                 bot_user_id = self.github_app_auth.app_id
         return get_git_env(bot_user_id=bot_user_id, bot_name=bot_name, api_url=api_url)
     
     def verify_changes_committed(self) -> bool:
-        """
-        Verify that changes have been committed by checking git status.
-        
-        Returns:
-            True if there are no uncommitted changes, False otherwise
-        """
         result = subprocess.run(
             ["git", "status", "--porcelain"],
             cwd=self.work_dir,
@@ -207,16 +190,9 @@ class ClaudeRunner:
             text=True,
         )
         
-        # Check if there are any uncommitted changes
         return result.stdout.strip() == ""
     
     def get_commit_message(self) -> Optional[str]:
-        """
-        Get the most recent commit message.
-        
-        Returns:
-            The most recent commit message, or None if no commits exist
-        """
         result = subprocess.run(
             ["git", "log", "-1", "--pretty=%B"],
             cwd=self.work_dir,

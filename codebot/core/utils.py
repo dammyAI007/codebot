@@ -55,7 +55,6 @@ def validate_github_app_config(api_url: Optional[str] = None, repository_url: Op
         if verbose:
             print(f"  → Configuration error: {error_msg}")
         
-        # Check if it's a "not found" error (missing env vars) vs API error
         if "not found" in error_msg.lower() and ("GITHUB_APP" in error_msg or "environment variable" in error_msg):
             return False, "config_missing"
         elif "404" in error_msg or "Not Found" in error_msg:
@@ -83,13 +82,9 @@ def detect_github_info(repository_url: str) -> Dict[str, str]:
     if not parsed.netloc:
         raise ValueError(f"Invalid repository URL: {repository_url}")
     
-    # Extract host
     host = parsed.netloc
-    
-    # Determine if it's GitHub.com or Enterprise
     is_enterprise = host != "github.com"
     
-    # Build API URL
     if is_enterprise:
         api_url = f"https://{host}/api/v3"
     else:
@@ -117,14 +112,12 @@ def detect_github_api_url(repository_url: Optional[str] = None, verbose: bool = 
     if verbose:
         print("  → Detecting GitHub API URL...")
         
-    # Check explicit API URL from environment
     api_url = os.getenv("GITHUB_API_URL")
     if api_url:
         if verbose:
             print(f"  → Found GITHUB_API_URL environment variable: {api_url}")
         return api_url.rstrip("/")
     
-    # Check enterprise URL from environment
     enterprise_url = os.getenv("GITHUB_ENTERPRISE_URL")
     if enterprise_url:
         api_url = f"{enterprise_url.rstrip('/')}/api/v3"
@@ -133,7 +126,6 @@ def detect_github_api_url(repository_url: Optional[str] = None, verbose: bool = 
             print(f"  → Derived API URL: {api_url}")
         return api_url
     
-    # Try to derive from repository URL
     if repository_url:
         if verbose:
             print(f"  → Deriving API URL from repository URL: {repository_url}")
@@ -143,7 +135,6 @@ def detect_github_api_url(repository_url: Optional[str] = None, verbose: bool = 
             print(f"  → Derived API URL: {api_url}")
         return api_url
     
-    # Default to github.com
     if verbose:
         print("  → No environment variables or repository URL provided, using default: https://api.github.com")
     return "https://api.github.com"
@@ -188,26 +179,19 @@ def get_codebot_git_author_info(bot_user_id: str, bot_name: Optional[str] = None
     if not bot_name:
         raise ValueError("Bot name is required. Please set GITHUB_BOT_NAME environment variable.")
     
-    # Determine the correct email domain based on GitHub instance
     if api_url:
-        # Extract domain from API URL
         parsed = urlparse(api_url)
         if parsed.netloc == "api.github.com":
-            # GitHub.com
             email_domain = "users.noreply.github.com"
         else:
-            # GitHub Enterprise - use the enterprise domain
             enterprise_domain = parsed.netloc
             if enterprise_domain.startswith("api."):
-                # Remove 'api.' prefix if present
                 enterprise_domain = enterprise_domain[4:]
             elif "/api/v3" in api_url:
-                # Extract base domain from URL like https://github.enterprise.com/api/v3
                 base_url = api_url.replace("/api/v3", "")
                 enterprise_domain = urlparse(base_url).netloc
             email_domain = f"users.noreply.{enterprise_domain}"
     else:
-        # Fallback to github.com if no API URL provided
         email_domain = "users.noreply.github.com"
     
     author_name = bot_name
@@ -415,22 +399,18 @@ def cleanup_pr_workspace(
     if not branch_name.startswith("u/codebot/"):
         return False, "Not a codebot branch"
     
-    # Extract UUID from branch name
     uuid = extract_uuid_from_branch(branch_name)
     if not uuid:
         return False, f"Could not extract UUID from branch: {branch_name}"
     
-    # Find workspace by UUID
     workspace_path = find_workspace_by_uuid(workspace_base_dir, uuid)
     if not workspace_path:
         return False, f"No workspace found for UUID: {uuid}"
     
-    # Find task and update status if merged parameter is provided
     task = global_task_store.find_task_by_branch_uuid(uuid)
     if not task and pr_url:
         task = global_task_store.find_task_by_pr_url(pr_url)
     
-    # Update task status if merged parameter is provided
     if task and merged is not None:
         if merged:
             global_task_store.update_task(
@@ -445,7 +425,6 @@ def cleanup_pr_workspace(
                 completed_at=datetime.utcnow()
             )
     
-    # Clean up workspace
     if cleanup_workspace(workspace_path):
         pr_info = f"PR #{pr_number}" if pr_number else "PR"
         return True, f"Successfully cleaned up workspace for {pr_info}: {workspace_path}"

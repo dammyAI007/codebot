@@ -3,9 +3,10 @@
 import subprocess
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from codebot.core.github_app import GitHubAppAuth
-from codebot.core.utils import get_git_env
+from codebot.core.utils import get_git_env, is_github_url
 
 
 class GitOps:
@@ -23,7 +24,6 @@ class GitOps:
         self.github_app_auth = github_app_auth
     
     def _get_git_env(self) -> dict:
-        """Get git environment variables for non-interactive operation."""
         bot_user_id = None
         bot_name = None
         api_url = None
@@ -31,7 +31,6 @@ class GitOps:
             bot_user_id = self.github_app_auth.bot_user_id
             bot_name = self.github_app_auth.get_bot_login()
             api_url = self.github_app_auth.api_url
-            # Fallback to app_id if bot_user_id is not available
             if not bot_user_id:
                 bot_user_id = self.github_app_auth.app_id
         return get_git_env(bot_user_id=bot_user_id, bot_name=bot_name, api_url=api_url)
@@ -46,9 +45,6 @@ class GitOps:
         Returns:
             Authenticated URL with embedded token
         """
-        from urllib.parse import urlparse
-        from codebot.core.utils import is_github_url
-        
         if not self.github_app_auth or not is_github_url(repository_url):
             return repository_url
         
@@ -56,20 +52,15 @@ class GitOps:
         if not parsed.netloc:
             return repository_url
         
-        # Extract repo path
         path = parsed.path
         if not path.endswith(".git"):
             path += ".git"
         
-        # Get installation token from GitHub App auth
         token = self.github_app_auth.get_installation_token()
-        
-        # Build authenticated URL using oauth2 format
         auth_url = f"https://oauth2:{token}@{parsed.netloc}{path}"
         return auth_url
     
     def _get_remote_url(self) -> Optional[str]:
-        """Get the current remote origin URL."""
         env = self._get_git_env()
         result = subprocess.run(
             ["git", "remote", "get-url", "origin"],
@@ -84,7 +75,6 @@ class GitOps:
         return None
     
     def _set_remote_url(self, url: str) -> None:
-        """Set the remote origin URL."""
         env = self._get_git_env()
         result = subprocess.run(
             ["git", "remote", "set-url", "origin", url],
@@ -106,7 +96,6 @@ class GitOps:
         """
         env = self._get_git_env()
         
-        # Stage all changes
         result = subprocess.run(
             ["git", "add", "-A"],
             cwd=self.work_dir,
@@ -118,7 +107,6 @@ class GitOps:
         if result.returncode != 0:
             raise RuntimeError(f"Failed to stage changes: {result.stderr}")
         
-        # Commit
         result = subprocess.run(
             ["git", "commit", "-m", message],
             cwd=self.work_dir,
@@ -141,7 +129,6 @@ class GitOps:
         """
         env = self._get_git_env()
         
-        # For GitHub repositories with GitHub App auth, temporarily use authenticated URL
         original_url = None
         if self.github_app_auth:
             original_url = self._get_remote_url()
@@ -152,7 +139,6 @@ class GitOps:
                     self._set_remote_url(auth_url)
         
         try:
-            # Push branch to remote
             result = subprocess.run(
                 ["git", "push", "-u", "origin", branch_name],
                 cwd=self.work_dir,
@@ -167,7 +153,6 @@ class GitOps:
             print(f"Pushed branch {branch_name} to remote")
             
         finally:
-            # Restore original URL for security
             if original_url and self.github_app_auth:
                 print("Restoring clean remote URL...")
                 self._set_remote_url(original_url)
@@ -269,7 +254,6 @@ class GitOps:
         """
         env = self._get_git_env()
         
-        # Get the current commit message
         result = subprocess.run(
             ["git", "log", "-1", "--pretty=format:%B"],
             cwd=self.work_dir,
@@ -284,35 +268,27 @@ class GitOps:
         
         commit_message = result.stdout
         
-        # Check if there are any unwanted lines to remove
         lines = commit_message.split("\n")
         cleaned_lines = []
         has_unwanted = False
         
         for line in lines:
             stripped = line.strip()
-            # Remove Co-Authored-By trailers
             if stripped.startswith("Co-Authored-By:"):
                 has_unwanted = True
                 continue
-            # Remove "🤖 Generated with Claude Code" (exact match or contains)
             if stripped == "🤖 Generated with Claude Code" or "🤖 Generated with Claude Code" in stripped:
                 has_unwanted = True
                 continue
             cleaned_lines.append(line)
         
-        # If no unwanted content found, nothing to do
         if not has_unwanted:
             return
         
-        # Reconstruct cleaned commit message
         cleaned_message = "\n".join(cleaned_lines).strip()
-        # Remove any trailing empty lines
         while cleaned_message.endswith("\n\n"):
             cleaned_message = cleaned_message[:-1]
         
-        # Amend the commit with cleaned message
-        # We need to preserve the author/committer, so we use environment variables
         result = subprocess.run(
             ["git", "commit", "--amend", "-m", cleaned_message],
             cwd=self.work_dir,
@@ -339,10 +315,8 @@ class GitOps:
         """
         print("Fetching latest changes from remote...")
         
-        # Store original URL for restoration later
         original_url = None
         
-        # Ensure authenticated URL is set before fetch
         if self.github_app_auth:
             original_url = self._get_remote_url()
             if original_url and not self._is_authenticated_url(original_url):
@@ -368,7 +342,6 @@ class GitOps:
             return True
             
         finally:
-            # Always restore clean URL for security
             if self.github_app_auth and original_url:
                 print("Restoring clean remote URL...")
                 self._set_remote_url(original_url)
@@ -385,10 +358,8 @@ class GitOps:
         """
         print(f"Pulling latest changes from branch: {branch_name}")
         
-        # Store original URL for restoration later
         original_url = None
         
-        # Ensure authenticated URL is set before pull
         if self.github_app_auth:
             original_url = self._get_remote_url()
             if original_url and not self._is_authenticated_url(original_url):
@@ -414,7 +385,6 @@ class GitOps:
             return True
             
         finally:
-            # Always restore clean URL for security
             if self.github_app_auth and original_url:
                 print("Restoring clean remote URL...")
                 self._set_remote_url(original_url)

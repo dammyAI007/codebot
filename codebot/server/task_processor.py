@@ -38,7 +38,6 @@ class TaskProcessor:
         self.workers = []
     
     def start(self):
-        """Start worker threads."""
         self.running = True
         print(f"Starting {self.num_workers} task processor worker(s)...")
         
@@ -52,7 +51,6 @@ class TaskProcessor:
             self.workers.append(worker)
     
     def stop(self):
-        """Stop worker threads."""
         self.running = False
         print("Stopping task processor...")
     
@@ -90,19 +88,12 @@ class TaskProcessor:
         print(f"{worker_name} stopped")
     
     def process_task(self, task_id: str):
-        """
-        Process a single task.
-        
-        Args:
-            task_id: Task ID to process
-        """
         task = self.task_queue.get_task(task_id)
         
         if not task:
             print(f"ERROR: Task {task_id} not found")
             return
         
-        # Update status to running
         self.task_queue.update_status(
             task_id,
             status="running",
@@ -110,25 +101,21 @@ class TaskProcessor:
         )
         
         try:
-            # Create orchestrator
             orchestrator = Orchestrator(
                 task=task.prompt,
                 work_base_dir=self.workspace_base_dir,
                 github_app_auth=self.github_app_auth,
             )
             
-            # Run task
             print(f"Executing task {task_id}...")
             orchestrator.run()
             
-            # Get result
             result = {
                 "pr_url": orchestrator.pr_url,
                 "branch_name": orchestrator.branch_name,
                 "work_dir": str(orchestrator.work_dir) if orchestrator.work_dir else None,
             }
             
-            # PR created - task is now pending review
             self.task_queue.update_status(
                 task_id,
                 status="pending_review",
@@ -141,7 +128,6 @@ class TaskProcessor:
         except Exception as e:
             print(f"ERROR: Task {task_id} failed: {e}")
             
-            # Update status to failed
             self.task_queue.update_status(
                 task_id,
                 status="failed",

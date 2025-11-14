@@ -22,7 +22,6 @@ def parse_task_prompt(content: str) -> TaskPrompt:
     """
     content = content.strip()
     
-    # Try to parse as JSON first
     try:
         data = json.loads(content)
     except json.JSONDecodeError:

@@ -99,7 +99,6 @@ def create_api_blueprint(task_queue: TaskQueue) -> Blueprint:
     @api.route("/tasks/<task_id>/status", methods=["GET"])
     @require_api_key
     def get_task_status(task_id: str):
-        """Get task status by ID."""
         task = task_queue.get_task(task_id)
         
         if not task:
@@ -127,7 +126,6 @@ def create_api_blueprint(task_queue: TaskQueue) -> Blueprint:
     @api.route("/tasks", methods=["GET"])
     @require_api_key
     def list_tasks():
-        """List tasks with optional status filter."""
         status_filter = request.args.get("status")
         limit = request.args.get("limit", 100, type=int)
         

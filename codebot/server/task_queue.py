@@ -22,12 +22,6 @@ class TaskQueue:
         self.task_store = global_task_store
     
     def enqueue(self, task: Task) -> None:
-        """
-        Add a task to the queue.
-        
-        Args:
-            task: Task to enqueue
-        """
         self.task_store.add_task(task)
         self.queue.put(task.id)
     
@@ -47,15 +41,6 @@ class TaskQueue:
             return None
     
     def get_task(self, task_id: str) -> Optional[Task]:
-        """
-        Get task by ID.
-        
-        Args:
-            task_id: Task ID
-            
-        Returns:
-            Task or None if not found
-        """
         return self.task_store.get_task(task_id)
     
     def update_status(
@@ -105,10 +90,8 @@ class TaskQueue:
         return self.task_store.list_tasks(status_filter=status_filter, limit=limit)
     
     def size(self) -> int:
-        """Get current queue size."""
         return self.queue.qsize()
     
     def task_done(self) -> None:
-        """Mark task as done in queue."""
         self.queue.task_done()
 

@@ -41,19 +41,15 @@ def create_app(
         static_folder=str(static_dir)
     )
     
-    # Store bot login in app config for webhook handlers
     if bot_login:
         app.config['CODEBOT_BOT_LOGIN'] = bot_login
     
-    # Store workspace base directory for cleanup handlers
     if workspace_base_dir:
         app.config['CODEBOT_WORKSPACE_BASE_DIR'] = str(workspace_base_dir)
     
-    # Store GitHub App auth for repository endpoints
     if github_app_auth:
         app.github_app_auth = github_app_auth
     
-    # Register webhook handlers (only if webhooks are enabled)
     if enable_webhook:
         from codebot.server import webhook
         
@@ -67,34 +63,28 @@ def create_app(
     else:
         print("Webhook endpoint disabled (polling mode enabled)")
     
-    # Register web UI blueprint
     from codebot.server.web_ui import create_web_ui_blueprint
     
     web_ui_bp = create_web_ui_blueprint()
     app.register_blueprint(web_ui_bp)
     print("Web UI registered at /")
     
-    # Register API blueprint if task queue is provided
     if task_queue:
         from codebot.server.api import create_api_blueprint
         
         api_bp = create_api_blueprint(task_queue)
         app.register_blueprint(api_bp, url_prefix="/api")
         
-        # Store task queue reference for health check
         app.task_queue = task_queue
         print("API endpoints registered at /api")
     
-    # Health check endpoint
     @app.route("/health", methods=["GET"])
     def health_check():
-        """Health check endpoint."""
         response = {
             "status": "healthy",
             "review_queue_size": review_queue.qsize()
         }
         
-        # Add task queue size if available
         if hasattr(app, "task_queue"):
             response["task_queue_size"] = app.task_queue.size()
         

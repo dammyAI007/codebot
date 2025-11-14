@@ -23,13 +23,11 @@ def create_web_ui_blueprint() -> Blueprint:
     @web_ui.route("/", methods=["GET"])
     @require_basic_auth
     def index():
-        """Serve main tasks page."""
         return render_template("tasks.html")
     
     @web_ui.route("/api/web/tasks", methods=["GET"])
     @require_basic_auth
     def list_tasks():
-        """List tasks with optional filtering."""
         status_filter = request.args.get("status")
         source_filter = request.args.get("source")
         limit = request.args.get("limit", 50, type=int)
@@ -73,7 +71,6 @@ def create_web_ui_blueprint() -> Blueprint:
     @web_ui.route("/api/web/tasks/<task_id>", methods=["GET"])
     @require_basic_auth
     def get_task(task_id: str):
-        """Get task details by ID."""
         task = global_task_store.get_task(task_id)
         
         if not task:

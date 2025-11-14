@@ -64,7 +64,6 @@ def run(
     """
     load_dotenv()
     
-    # Parse task prompt
     try:
         if task_prompt:
             task = parse_task_prompt(task_prompt)
@@ -77,7 +76,6 @@ def run(
         click.echo(f"Error parsing task prompt: {e}", err=True)
         sys.exit(1)
     
-    # Determine work directory
     if work_dir:
         work_base_dir = Path(work_dir)
     else:
@@ -85,11 +83,9 @@ def run(
     
     work_base_dir.mkdir(parents=True, exist_ok=True)
     
-    # Validate GitHub App configuration
     print("Validating GitHub App configuration...")
     if verbose:
         print("Debug information:")
-        # Show environment variables that affect GitHub API detection
         github_api_url = os.getenv("GITHUB_API_URL")
         github_enterprise_url = os.getenv("GITHUB_ENTERPRISE_URL")
         if github_api_url:
@@ -128,10 +124,8 @@ def run(
         sys.exit(1)
     print("GitHub App configuration validated successfully")
     
-    # Create GitHub App auth instance
     github_app_auth = GitHubAppAuth()
     
-    # Create task tracking object
     task_id = str(uuid.uuid4())
     task_obj = Task(
         id=task_id,
@@ -153,7 +147,6 @@ def run(
         )
         orchestrator.run()
         
-        # PR created - task is now pending review
         result = {
             "pr_url": orchestrator.pr_url,
             "branch_name": orchestrator.branch_name,

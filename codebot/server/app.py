@@ -111,7 +111,6 @@ def serve(
     """
     load_dotenv()
     
-    # Validate GitHub App configuration
     print("Validating GitHub App configuration...")
     is_valid, error_type = validate_github_app_config(verbose=True)
     if not is_valid:
@@ -137,10 +136,8 @@ def serve(
         sys.exit(1)
     print("GitHub App configuration validated successfully")
     
-    # Create GitHub App auth instance
     github_app_auth = GitHubAppAuth()
     
-    # Get poll interval
     effective_poll_interval = poll_interval
     if effective_poll_interval is None:
         poll_interval_env = os.getenv("CODEBOT_POLL_INTERVAL")
@@ -153,30 +150,23 @@ def serve(
         else:
             effective_poll_interval = 300
     
-    # Handle polling vs webhook mode
     if enable_polling:
-        # Polling mode: ignore webhook secrets completely
         print(f"Polling mode enabled (interval: {effective_poll_interval}s)")
-        # Clear webhook secret from environment to ensure webhook endpoint is disabled
         if "GITHUB_WEBHOOK_SECRET" in os.environ:
             del os.environ["GITHUB_WEBHOOK_SECRET"]
     else:
-        # Webhook mode: require webhook secret
         effective_secret = webhook_secret or os.getenv("GITHUB_WEBHOOK_SECRET")
         
         if not effective_secret:
             click.echo("Error: Webhook secret is required when not using polling. Set GITHUB_WEBHOOK_SECRET env var, use --webhook-secret, or use --enable-polling", err=True)
             sys.exit(1)
         
-        # Set webhook secret in environment for the server
         os.environ["GITHUB_WEBHOOK_SECRET"] = effective_secret
         print("Webhook mode enabled")
     
-    # Handle API keys
     if api_key:
         os.environ["CODEBOT_API_KEYS"] = api_key
     
-    # Check if API is enabled
     from codebot.server.config import config
     api_enabled = config.has_api_keys()
     
@@ -185,7 +175,6 @@ def serve(
     else:
         print("HTTP API disabled (no API keys configured)")
     
-    # Determine work directory
     if work_dir:
         work_base_dir = Path(work_dir)
     else:
@@ -262,14 +251,11 @@ def serve(
             poller_thread = threading.Thread(target=poller.start, daemon=True)
             poller_thread.start()
     
-    # Create task queue and processor if API is enabled
     task_processor = None
     task_queue = None
     if api_enabled:
-        # Create task queue
         task_queue = TaskQueue(max_size=config.max_queue_size)
         
-        # Create and start task processor
         task_processor = TaskProcessor(
             task_queue=task_queue,
             workspace_base_dir=work_base_dir,
@@ -278,7 +264,6 @@ def serve(
         )
         task_processor.start()
     
-    # Get bot login for comment detection
     bot_login = github_app_auth.get_bot_login()
     
     # Create Flask app (disable webhook endpoint if polling is enabled)
@@ -290,7 +275,6 @@ def serve(
         enable_webhook=not enable_polling,
     )
     
-    # Start Flask server (blocking)
     try:
         start_server(app, port=port, debug=debug)
     except KeyboardInterrupt:

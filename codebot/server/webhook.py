@@ -38,45 +38,36 @@ def verify_signature(payload: bytes, signature: str, secret: str) -> bool:
     if not signature or not secret:
         return False
     
-    # GitHub sends signature as "sha256=<hash>"
     if not signature.startswith("sha256="):
         return False
     
-    expected_signature = signature[7:]  # Remove "sha256=" prefix
+    expected_signature = signature[7:]
     
-    # Compute HMAC
     mac = hmac.new(secret.encode(), payload, hashlib.sha256)
     computed_signature = mac.hexdigest()
     
-    # Constant-time comparison
     return hmac.compare_digest(computed_signature, expected_signature)
 
 
 def handle_webhook():
     """Handle incoming GitHub webhook events."""
-    # Get webhook secret from environment
     webhook_secret = os.getenv("GITHUB_WEBHOOK_SECRET")
     
     if not webhook_secret:
         current_app.logger.error("GITHUB_WEBHOOK_SECRET not set")
         return jsonify({"error": "Webhook secret not configured"}), 500
     
-    # Verify signature
     signature = request.headers.get("X-Hub-Signature-256", "")
     if not verify_signature(request.data, signature, webhook_secret):
         current_app.logger.warning("Invalid webhook signature")
         return jsonify({"error": "Invalid signature"}), 401
     
-    # Get event type
     event_type = request.headers.get("X-GitHub-Event", "")
-    
-    # Parse payload
     payload = request.json
     
     if not payload:
         return jsonify({"error": "Invalid payload"}), 400
     
-    # Handle pull request comment events
     if event_type == "pull_request_review_comment":
         return handle_review_comment(payload)
     elif event_type == "pull_request_review":
@@ -120,7 +111,6 @@ def handle_review_comment(payload: dict) -> tuple:
     pull_request = payload.get("pull_request", {})
     repository = payload.get("repository", {})
     
-    # Extract relevant information
     comment_data = {
         "type": "review_comment",
         "comment_id": comment.get("id"),
@@ -139,7 +129,6 @@ def handle_review_comment(payload: dict) -> tuple:
         "in_reply_to_id": comment.get("in_reply_to_id"),
     }
     
-    # Add to queue
     review_queue.put(comment_data)
     
     current_app.logger.info(f"Queued review comment for PR #{comment_data['pr_number']}")
@@ -165,7 +154,6 @@ def handle_review(payload: dict) -> tuple:
     review = payload.get("review", {})
     review_body = review.get("body") or ""
     
-    # Check if review is from codebot by checking user login
     review_user = review.get("user", {})
     review_user_login = review_user.get("login", "")
     bot_login = current_app.config.get("CODEBOT_BOT_LOGIN", "codebot-007[bot]")
@@ -177,7 +165,6 @@ def handle_review(payload: dict) -> tuple:
     pull_request = payload.get("pull_request", {})
     repository = payload.get("repository", {})
     
-    # Skip if review has no body (only inline comments)
     if not review_body.strip():
         return jsonify({"message": "Review has no body, skipping"}), 200
     
@@ -192,10 +179,9 @@ def handle_review(payload: dict) -> tuple:
         "repo_url": repository.get("clone_url"),
         "repo_owner": repository.get("owner", {}).get("login"),
         "repo_name": repository.get("name"),
-        "review_state": review.get("state"),  # APPROVED, CHANGES_REQUESTED, COMMENTED
+        "review_state": review.get("state"),
     }
     
-    # Add to queue
     review_queue.put(comment_data)
     
     current_app.logger.info(f"Queued review for PR #{comment_data['pr_number']}")
@@ -240,10 +226,8 @@ def handle_issue_comment(payload: dict) -> tuple:
     
     repository = payload.get("repository", {})
     
-    # Extract PR number from issue
     pr_number = issue.get("number")
     
-    # Extract relevant information
     comment_data = {
         "type": "issue_comment",
         "comment_id": comment.get("id"),
@@ -251,13 +235,12 @@ def handle_issue_comment(payload: dict) -> tuple:
         "pr_number": pr_number,
         "pr_title": issue.get("title"),
         "pr_body": issue.get("body", ""),
-        "branch_name": None,  # Will be fetched from PR details
+        "branch_name": None,
         "repo_url": repository.get("clone_url"),
         "repo_owner": repository.get("owner", {}).get("login"),
         "repo_name": repository.get("name"),
     }
     
-    # Add to queue
     review_queue.put(comment_data)
     
     current_app.logger.info(f"Queued issue comment for PR #{comment_data['pr_number']}")
@@ -284,18 +267,15 @@ def handle_pull_request(payload: dict) -> tuple:
     pull_request = payload.get("pull_request", {})
     branch_name = pull_request.get("head", {}).get("ref", "")
     
-    # Only handle codebot branches
     if not branch_name.startswith("u/codebot/"):
         current_app.logger.info(f"Ignoring non-codebot branch: {branch_name}")
         return jsonify({"message": "Not a codebot branch"}), 200
     
-    # Extract UUID from branch name
     uuid = extract_uuid_from_branch(branch_name)
     if not uuid:
         current_app.logger.warning(f"Could not extract UUID from branch: {branch_name}")
         return jsonify({"message": "Could not extract UUID from branch"}), 200
     
-    # Get workspace base directory from app config
     workspace_base_dir_str = current_app.config.get("CODEBOT_WORKSPACE_BASE_DIR")
     if not workspace_base_dir_str:
         current_app.logger.warning("CODEBOT_WORKSPACE_BASE_DIR not configured")
@@ -303,13 +283,11 @@ def handle_pull_request(payload: dict) -> tuple:
     
     workspace_base_dir = Path(workspace_base_dir_str)
     
-    # Find workspace by UUID
     workspace_path = find_workspace_by_uuid(workspace_base_dir, uuid)
     if not workspace_path:
         current_app.logger.info(f"No workspace found for UUID: {uuid}")
         return jsonify({"message": "Workspace not found"}), 200
     
-    # Update task status based on PR state
     pr_number = pull_request.get("number")
     pr_url = pull_request.get("html_url")
     
@@ -317,7 +295,6 @@ def handle_pull_request(payload: dict) -> tuple:
     if not task and pr_url:
         task = global_task_store.find_task_by_pr_url(pr_url)
     
-    # Handle reopened PRs
     if action == "reopened":
         if task:
             current_app.logger.info(f"PR #{pr_number} reopened, updating task {task.id} back to pending_review")
@@ -328,10 +305,8 @@ def handle_pull_request(payload: dict) -> tuple:
             )
         return jsonify({"message": "PR reopened, task status updated"}), 200
     
-    # Handle closed PRs (merged or just closed)
     merged = pull_request.get("merged", False)
     
-    # Clean up workspace using central cleanup function (also updates task status)
     success, message = cleanup_pr_workspace(
         branch_name=branch_name,
         workspace_base_dir=workspace_base_dir,

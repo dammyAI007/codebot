@@ -26,15 +26,6 @@ def detect_claude_md(repo_path: Path) -> Optional[Path]:
 
 
 def check_claude_md_exists(repo_path: Path) -> bool:
-    """
-    Check if CLAUDE.md or Agents.md exists in the repository.
-    
-    Args:
-        repo_path: Path to the repository root
-        
-    Returns:
-        True if CLAUDE.md or Agents.md exists, False otherwise
-    """
     return detect_claude_md(repo_path) is not None
 
 

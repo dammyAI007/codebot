@@ -39,14 +39,12 @@ class ReviewRunner:
         Returns:
             CompletedProcess with the command result
         """
-        # Build specialized system prompt for code reviews
         system_prompt = self._build_review_system_prompt(
             comment_body,
             pr_context,
             is_change_request
         )
         
-        # Build task description
         if is_change_request:
             task_description = (
                 f"Code Review Change Request:\n\n"

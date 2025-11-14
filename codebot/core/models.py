@@ -17,7 +17,6 @@ class TaskPrompt:
     base_branch: Optional[str] = None
     
     def __post_init__(self):
-        """Validate required fields."""
         if not self.repository_url:
             raise ValueError("repository_url is required")
         if not self.description:

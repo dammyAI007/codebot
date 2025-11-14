@@ -56,25 +56,10 @@ class TaskStore:
         self.lock = threading.Lock()
     
     def add_task(self, task: Task) -> None:
-        """
-        Add a task to the store.
-        
-        Args:
-            task: Task to add
-        """
         with self.lock:
             self.storage.add_task(task)
     
     def get_task(self, task_id: str) -> Optional[Task]:
-        """
-        Get task by ID.
-        
-        Args:
-            task_id: Task ID
-            
-        Returns:
-            Task or None if not found
-        """
         with self.lock:
             return self.storage.get_task(task_id)
     
@@ -133,12 +118,6 @@ class TaskStore:
             )
     
     def get_all_tasks(self) -> List[Task]:
-        """
-        Get all tasks.
-        
-        Returns:
-            List of all tasks
-        """
         with self.lock:
             return self.storage.get_all_tasks()
     
@@ -169,12 +148,10 @@ class TaskStore:
             return self.storage.find_task_by_pr_url(pr_url)
     
     def size(self) -> int:
-        """Get total number of tasks."""
         with self.lock:
             return len(self.storage.get_all_tasks())
     
     def close(self) -> None:
-        """Close storage connection."""
         with self.lock:
             self.storage.close()
 
