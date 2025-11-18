@@ -558,10 +558,8 @@ Do not include any other text, markdown, or formatting. Only the JSON object."""
             env_manager.work_dir = workspace_path
             print(f"Created work directory: {workspace_path}")
             
-            # Clone the repository
             GitOps.clone_repository(repo_url, workspace_path, self.github_app_auth)
             
-            # Configure git and checkout the branch
             env_manager.git_ops.configure_git_author()
             env_manager.branch_name = branch_name
             env_manager.git_ops.checkout_branch(branch_name)
