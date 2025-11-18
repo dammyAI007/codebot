@@ -1053,30 +1053,9 @@
                 return;
             }
             
-            navigator.clipboard.writeText(logText).then(() => {
-                const copyBtn = document.getElementById('copy-logs-btn');
-                const originalText = copyBtn.textContent;
-                copyBtn.textContent = 'Copied!';
-                copyBtn.classList.add('btn-success');
-                copyBtn.classList.remove('btn-outline-secondary');
-                
-                setTimeout(() => {
-                    copyBtn.textContent = originalText;
-                    copyBtn.classList.remove('btn-success');
-                    copyBtn.classList.add('btn-outline-secondary');
-                }, 2000);
-            }).catch(err => {
-                console.error('Failed to copy logs:', err);
-                
-                const textarea = document.createElement('textarea');
-                textarea.value = logText;
-                textarea.style.position = 'fixed';
-                textarea.style.opacity = '0';
-                document.body.appendChild(textarea);
-                textarea.select();
-                
-                try {
-                    document.execCommand('copy');
+            // Check if Clipboard API is available (requires HTTPS or localhost)
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(logText).then(() => {
                     const copyBtn = document.getElementById('copy-logs-btn');
                     const originalText = copyBtn.textContent;
                     copyBtn.textContent = 'Copied!';
@@ -1088,13 +1067,39 @@
                         copyBtn.classList.remove('btn-success');
                         copyBtn.classList.add('btn-outline-secondary');
                     }, 2000);
-                } catch (fallbackErr) {
-                    console.error('Fallback copy failed:', fallbackErr);
+                }).catch(err => {
+                    console.error('Failed to copy logs:', err);
                     alert('Failed to copy logs to clipboard');
-                } finally {
-                    document.body.removeChild(textarea);
+                });
+            } else {
+                // Fallback: offer download when Clipboard API is not available
+                if (confirm('Copy to clipboard is not available (requires HTTPS). Would you like to download the logs instead?')) {
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+                    const filename = `${activeTab}-logs-${timestamp}.txt`;
+                    
+                    const blob = new Blob([logText], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                    const copyBtn = document.getElementById('copy-logs-btn');
+                    const originalText = copyBtn.textContent;
+                    copyBtn.textContent = 'Downloaded!';
+                    copyBtn.classList.add('btn-success');
+                    copyBtn.classList.remove('btn-outline-secondary');
+                    
+                    setTimeout(() => {
+                        copyBtn.textContent = originalText;
+                        copyBtn.classList.remove('btn-success');
+                        copyBtn.classList.add('btn-outline-secondary');
+                    }, 2000);
                 }
-            });
+            }
         }
 
         document.getElementById('taskModal').addEventListener('hidden.bs.modal', () => {
