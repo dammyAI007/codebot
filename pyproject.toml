@@ -16,6 +16,11 @@ dependencies = [
 [project.scripts]
 codebot = "codebot.cli:main"
 
+[[tool.uv.index]]
+name = "YelpPyPI"
+url = "http://169.254.255.254:20641/simple/"
+default = true
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
