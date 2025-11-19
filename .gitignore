@@ -9,6 +9,11 @@ wheels/
 # Virtual environments
 .venv
 
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
 # Codebot work directories
 codebot_workspace/
 codebot_data/

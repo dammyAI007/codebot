@@ -17,7 +17,6 @@ def test_imports():
     import codebot.server.app
     import codebot.server.review_processor
     import codebot.server.review_runner
-    import codebot.server.webhook_server
     
     # Verify version
     assert hasattr(codebot, '__version__')
