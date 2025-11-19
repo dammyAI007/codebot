@@ -16,7 +16,7 @@ AI-powered development automation tool that executes tasks using Claude Code CLI
 ```bash
 # Install dependencies
 curl -LsSf https://astral.sh/uv/install.sh | sh
-git clone https://github.com/yourusername/codebot.git
+git clone https://github.yelpcorp.com/ajibigad/codebot.git
 cd codebot && uv sync
 
 # Activate virtual environment
@@ -47,6 +47,7 @@ That's it! Codebot will clone the repo, make changes with Claude Code CLI, and c
 - [Configuration](docs/configuration.md) - Environment variables and settings
 - [Architecture](docs/architecture.md) - How codebot works internally
 - [Examples](docs/examples.md) - Practical use cases and recipes
+- [Testing](tests/README.md) - Running tests and test suite documentation
 
 ## Installation
 
@@ -65,7 +66,7 @@ That's it! Codebot will clone the repo, make changes with Claude Code CLI, and c
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Clone and install codebot
-git clone https://github.com/yourusername/codebot.git
+git clone https://github.yelpcorp.com/ajibigad/codebot.git
 cd codebot
 uv sync
 
@@ -123,14 +124,17 @@ See [Examples](docs/examples.md) for more use cases.
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/codebot.git
+git clone https://github.yelpcorp.com/ajibigad/codebot.git
 cd codebot
 
-# Install dependencies
-uv sync
+# Install dependencies (including test dependencies)
+uv pip install -e ".[test]"
 
 # Run tests
-uv run python tests/test_imports.py
+uv run pytest
+
+# Run with coverage
+uv run pytest --cov=codebot --cov-report=html
 
 # Start development server with auto-reload
 uv run codebot serve --port 5000 --debug
@@ -235,9 +239,9 @@ MIT License - see LICENSE file for details.
 - [Documentation](docs/index.md)
 - [Installation Guide](docs/installation.md)
 - [Examples](docs/examples.md)
-- [GitHub Repository](https://github.com/yourusername/codebot)
-- [Issue Tracker](https://github.com/yourusername/codebot/issues)
+- [GitHub Repository](https://github.yelpcorp.com/ajibigad/codebot)
+- [Issue Tracker](https://github.yelpcorp.com/ajibigad/codebot/issues)
 
 ---
 
-Made with ❤️ by [ajibigad](https://github.com/ajibigad) using [Cursor](https://cursor.com/home)
+Made with ❤️ by [ajibigad](https://github.yelpcorp.com/ajibigad) using [Cursor](https://cursor.com/home)
